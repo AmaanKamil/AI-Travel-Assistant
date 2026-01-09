@@ -4,6 +4,7 @@ import { useState } from "react";
 import VoiceModal from "@/components/VoiceModal";
 import { Mic } from "lucide-react";
 
+// Main Landing Page
 export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
