@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Mic, X, Loader2, MessageSquare } from "lucide-react";
+import { Mic, X, Loader2, MessageSquare, Mail } from "lucide-react";
 import TranscriptBox from "./TranscriptBox";
-import { orchestrateTrip } from "@/lib/api";
+import { orchestrateTrip, exportItinerary } from "@/lib/api";
 import ItineraryView from "./ItineraryView";
 import SourcesPanel from "./SourcesPanel";
 import PlanningChecks from "./PlanningChecks";
@@ -29,7 +29,24 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [citations, setCitations] = useState<any[]>([]);
     const [highlightDay, setHighlightDay] = useState<number | null>(null);
 
+    const [email, setEmail] = useState("");
+    const [isExporting, setIsExporting] = useState(false);
+
     const recognitionRef = useRef<any>(null);
+
+    const handleExport = async () => {
+        if (!email || !displayItinerary) return;
+
+        setIsExporting(true);
+        const result = await exportItinerary(displayItinerary, email);
+        if (result.success) {
+            setResponseMessage("I've emailed the itinerary to you!");
+            setEmail(""); // clear input on success
+        } else {
+            setResponseMessage("Failed to send email: " + result.message);
+        }
+        setIsExporting(false);
+    };
 
     const handleSubmit = async (text: string) => {
         if (!text) return;
@@ -197,28 +214,51 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                 </div>
 
                 {/* Footer / Controls */}
-                <div className="p-8 border-t border-white/5 flex flex-col items-center gap-4 bg-gradient-to-t from-black/20 to-transparent">
-                    <button
-                        onClick={isListening ? stopListening : startListening}
-                        disabled={isProcessing}
-                        className={`
+                <div className="p-8 border-t border-white/5 flex flex-col items-center gap-6 bg-gradient-to-t from-black/20 to-transparent">
+                    {/* Export Section */}
+                    {displayItinerary && (
+                        <div className="w-full flex items-center justify-between gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                            <input
+                                type="email"
+                                placeholder="Enter your email to receive this plan"
+                                className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 border-none focus:ring-0 outline-none"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                            <button
+                                onClick={handleExport}
+                                disabled={isExporting || !email}
+                                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {isExporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                                {isExporting ? "Sending..." : "Send to Email"}
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col items-center gap-4">
+                        <button
+                            onClick={isListening ? stopListening : startListening}
+                            disabled={isProcessing}
+                            className={`
                             relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 shadow-lg group
                             ${isListening ? 'bg-red-500 scale-110 shadow-red-500/50 animate-pulse' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/50'}
                             ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
-                    >
-                        <div className="absolute inset-0 rounded-full bg-inherit animate-ping opacity-20 group-hover:opacity-40" />
-                        {isProcessing ? (
-                            <Loader2 className="w-8 h-8 text-white animate-spin" />
-                        ) : (
-                            <Mic className={`w-8 h-8 text-white ${isListening ? 'scale-110' : ''}`} />
-                        )}
-                    </button>
-                    <p className="text-[10px] text-gray-500 font-medium uppercase tracking-[0.2em]">
-                        {isListening ? "Listening..." : isProcessing ? "Thinking..." : "Tap to Speak"}
-                    </p>
-                </div>
+                        >
+                            <div className="absolute inset-0 rounded-full bg-inherit animate-ping opacity-20 group-hover:opacity-40" />
+                            {isProcessing ? (
+                                <Loader2 className="w-8 h-8 text-white animate-spin" />
+                            ) : (
+                                <Mic className={`w-8 h-8 text-white ${isListening ? 'scale-110' : ''}`} />
+                            )}
+                        </button>
+                        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-[0.2em]">
+                            {isListening ? "Listening..." : isProcessing ? "Thinking..." : "Tap to Speak"}
+                        </p>
+                    </div>
 
+                </div>
             </div>
         </div>
     );

@@ -24,3 +24,19 @@ export const orchestrateTrip = async (sessionId: string, transcript: string): Pr
         };
     }
 };
+
+export const exportItinerary = async (itinerary: any, userEmail: string): Promise<{ success: boolean; message: string }> => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/api/export-itinerary`, {
+            itinerary,
+            userEmail
+        });
+        return { success: true, message: response.data.message };
+    } catch (error: any) {
+        console.error("Export Error:", error);
+        return {
+            success: false,
+            message: error.response?.data?.error || "Failed to send email."
+        };
+    }
+};
