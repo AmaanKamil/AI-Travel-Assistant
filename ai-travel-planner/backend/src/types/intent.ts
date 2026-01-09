@@ -6,4 +6,12 @@ export interface Intent {
         interests?: string[];
         constraints?: string[];
     };
+    editIntent?: EditIntent;
+}
+
+export interface EditIntent {
+    target_day: number | null;
+    target_block: 'morning' | 'afternoon' | 'evening' | null;
+    change_type: 'make_more_relaxed' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
+    raw_instruction: string;
 }

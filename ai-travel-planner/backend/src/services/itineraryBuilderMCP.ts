@@ -1,4 +1,5 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
+import { EditIntent } from '../types/intent';
 
 export async function buildItinerary(pois: any[], days: number): Promise<Itinerary> {
     console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} POIs`);
@@ -43,4 +44,46 @@ export async function buildItinerary(pois: any[], days: number): Promise<Itinera
         title: `Your ${days}-Day Dubai Adventure`,
         days: plans
     };
+}
+
+export async function buildItineraryEdit(original: Itinerary, intent: EditIntent): Promise<Itinerary> {
+    console.log(`[MCP: Builder] Editing itinerary... Intent: ${intent.change_type} on Day ${intent.target_day}`);
+
+    // Deep clone to avoid mutating original directly in memory too early
+    const updated = JSON.parse(JSON.stringify(original));
+
+    if (!intent.target_day) return updated;
+
+    const dayIndex = updated.days.findIndex((d: any) => d.day === intent.target_day);
+    if (dayIndex === -1) return updated;
+
+    const dayPlan = updated.days[dayIndex];
+
+    // Apply dummy logic based on change type
+    if (intent.change_type === 'make_more_relaxed') {
+        // Remove one activity and increase duration of others
+        if (dayPlan.blocks.length > 1) {
+            dayPlan.blocks.pop(); // Remove evening or last block
+            dayPlan.blocks[0].activity += " (Relaxed Pace)";
+            dayPlan.blocks[0].duration = "4 hours";
+        }
+    }
+    else if (intent.change_type === 'swap_activity') {
+        // Just mock a swap
+        dayPlan.blocks.forEach((block: any) => {
+            if (!intent.target_block || block.time.toLowerCase().includes(intent.target_block.toLowerCase())) {
+                block.activity = "New " + block.activity + " (Swapped)";
+            }
+        });
+    }
+    else if (intent.change_type === 'add_place') {
+        dayPlan.blocks.push({
+            time: 'Late Night',
+            activity: 'Dessert at Global Village',
+            duration: '45 mins'
+        });
+    }
+
+    // Pass back updated full object
+    return updated;
 }

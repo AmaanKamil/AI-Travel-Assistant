@@ -30,9 +30,10 @@ interface Itinerary {
 
 interface ItineraryViewProps {
     itinerary: Itinerary;
+    highlightDay?: number | null;
 }
 
-const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary }) => {
+const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }) => {
     if (!itinerary || !itinerary.days) return null;
 
     // Helper to group activities if they are just a flat list of blocks
@@ -91,11 +92,15 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary }) => {
                 {itinerary.days.map((dayData, idx) => {
                     const sections = getSections(dayData);
                     const dayNumber = dayData.day || (idx + 1);
+                    const isHighlighted = highlightDay === dayNumber;
 
                     return (
                         <div
                             key={idx}
-                            className="group relative bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-md transition-all duration-300 hover:border-white/20 hover:bg-white/10"
+                            className={`group relative bg-white/5 border rounded-3xl overflow-hidden backdrop-blur-md transition-all duration-300 ${isHighlighted
+                                    ? 'border-blue-500 ring-2 ring-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.02]'
+                                    : 'border-white/10 hover:border-white/20 hover:bg-white/10'
+                                }`}
                         >
                             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
 

@@ -27,6 +27,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [displayItinerary, setDisplayItinerary] = useState<any>(null);
     const [evaluations, setEvaluations] = useState<any>(null);
     const [citations, setCitations] = useState<any[]>([]);
+    const [highlightDay, setHighlightDay] = useState<number | null>(null);
 
     const recognitionRef = useRef<any>(null);
 
@@ -49,6 +50,13 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             }
             if (result.citations) {
                 setCitations(result.citations);
+            }
+
+            // Handle Edit Highlighting
+            if (result.editIntent && result.editIntent.target_day) {
+                setHighlightDay(result.editIntent.target_day);
+                // Clear highlight after 2 seconds
+                setTimeout(() => setHighlightDay(null), 2000);
             }
         }
         setIsProcessing(false);
@@ -102,7 +110,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
     const startListening = () => {
         setResponseMessage("");
-        setDisplayItinerary(null);
+        // setDisplayItinerary(null); // Keep previous itinerary visible for editing context
         setEvaluations(null);
         setCitations([]);
         setTranscript("");
@@ -182,7 +190,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
                             {/* Detailed Itinerary */}
                             {displayItinerary && (
-                                <ItineraryView itinerary={displayItinerary} />
+                                <ItineraryView itinerary={displayItinerary} highlightDay={highlightDay} />
                             )}
                         </div>
                     )}

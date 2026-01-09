@@ -14,6 +14,7 @@ export interface SessionContext {
     clarificationCount: number;
     itinerary?: Itinerary;
     lastEvaluation?: EvaluationReport;
+    lastEditIntent?: any; // Using any or importing EditIntent to avoid circular deps if complex
 }
 
 const sessions = new Map<string, SessionContext>();

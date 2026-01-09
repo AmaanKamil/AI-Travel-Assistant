@@ -2,9 +2,9 @@ import { getSession, createNewSession, saveSession } from './sessionContext';
 import { getNextState } from './stateMachine';
 import { extractIntent } from '../services/llmService';
 import { searchPOIs } from '../services/poiSearchMCP';
-import { buildItinerary } from '../services/itineraryBuilderMCP';
+import { buildItinerary, buildItineraryEdit } from '../services/itineraryBuilderMCP';
 import { getGroundedAnswer } from '../services/ragService';
-import { runEvaluations } from '../services/evaluationService';
+import { runEvaluations, runEditCorrectnessEval } from '../services/evaluationService';
 
 export async function handleUserInput(sessionId: string, transcript: string) {
     let context = getSession(sessionId);
@@ -37,6 +37,11 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         // Merge entities
         if (intent.entities) {
             context.collectedConstraints = { ...context.collectedConstraints, ...intent.entities };
+        }
+
+        // Save edit intent if present
+        if (intent.type === 'edit_itinerary') {
+            context.lastEditIntent = intent.editIntent;
         }
 
         debugLog.push(`Parsed Intent: ${intent.type}`);
@@ -111,8 +116,34 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
         logTransition('PLANNING', 'EVALUATING');
         context.currentState = 'EVALUATING';
-        logTransition('PLANNING', 'EVALUATING');
-        context.currentState = 'EVALUATING';
+    }
+
+    // --- STATE HANDLER: EDITING ---
+    if (context.currentState === 'EDITING') {
+        if (!context.itinerary || !context.lastEditIntent) {
+            responseMessage = "I can't edit the plan yet. Let's create one first.";
+            context.currentState = 'IDLE'; // Reset
+        } else {
+            // Apply Edit
+            const updatedItinerary = await buildItineraryEdit(context.itinerary, context.lastEditIntent);
+
+            // Validate Edit
+            const editReport = await runEditCorrectnessEval(context.itinerary, updatedItinerary, context.lastEditIntent);
+            debugLog.push(`Edit Correctness: ${editReport.passed ? 'PASS' : 'FAIL'} - ${editReport.diff_summary}`);
+
+            if (editReport.passed) {
+                context.itinerary = updatedItinerary;
+                context.lastEvaluation = { ...editReport, passed: true } as any; // Simple cast to reuse field
+                responseMessage = `I've updated Day ${context.lastEditIntent.target_day} for you.`;
+
+                logTransition('EDITING', 'PRESENTING');
+                context.currentState = 'PRESENTING';
+            } else {
+                responseMessage = "I tried to edit the plan, but it wouldn't be feasible. Keeping the original for now.";
+                // Revert state
+                context.currentState = 'PRESENTING';
+            }
+        }
     }
 
     // --- STATE HANDLER: EXPLAINING ---
@@ -128,6 +159,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         // After explaining, we usually go back to IDLE or wait for more
         context.currentState = 'IDLE';
     }
+
     if (context.currentState === 'EVALUATING') {
         if (context.itinerary) {
             const report = await runEvaluations(context.itinerary);
@@ -146,7 +178,9 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
     // --- STATE HANDLER: PRESENTING ---
     if (context.currentState === 'PRESENTING') {
-        responseMessage = `Here is your ${context.collectedConstraints.days}-day itinerary for Dubai.`;
+        if (!responseMessage) {
+            responseMessage = `Here is your ${context.collectedConstraints.days}-day itinerary for Dubai.`;
+        }
     }
 
     saveSession(context);
@@ -156,6 +190,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         currentState: context.currentState,
         itinerary: context.itinerary,
         evaluation: context.lastEvaluation,
+        editIntent: context.lastEditIntent, // Pass back for UI highlighting
         debug: { log: debugLog }
     };
 }
