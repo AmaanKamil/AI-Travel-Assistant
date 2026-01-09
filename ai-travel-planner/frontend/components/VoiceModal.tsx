@@ -56,7 +56,8 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         const result = await orchestrateTrip("ui-demo", text) as any;
 
         if (result.error) {
-            setResponseMessage("Error: " + result.error);
+            setResponseMessage(result.message || "Something went wrong.");
+            // Do not clear previous content on error
         } else {
             setResponseMessage(result.message);
             if (result.itinerary) {

@@ -2,6 +2,7 @@ import { Chroma } from "@langchain/community/vectorstores/chroma";
 import axios from 'axios';
 import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
+import { handleError } from '../utils/errorHandler';
 
 dotenv.config();
 
@@ -67,10 +68,9 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
         return { answer, citations };
 
     } catch (error) {
-        console.error("RAG Service Error:", error);
-        // Fallback if vector store is down
+        handleError(error, 'RAG Service');
         return {
-            answer: "I'm having trouble accessing my knowledge base right now, but I can tell you generally that Dubai is great!",
+            answer: "I couldn't find reliable information for this. I'll stick to what I know for sure.",
             citations: []
         };
     }

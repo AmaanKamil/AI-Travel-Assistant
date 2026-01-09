@@ -18,9 +18,10 @@ export const orchestrateTrip = async (sessionId: string, transcript: string): Pr
         return response.data;
     } catch (error: any) {
         console.error("API Error:", error);
+        const serverError = error.response?.data?.error;
         return {
-            message: "Sorry, I encountered an error connecting to the planner.",
-            error: error.message
+            message: serverError || "Sorry, I encountered an unexpected error. Please try again.",
+            error: serverError || error.message
         };
     }
 };

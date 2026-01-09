@@ -3,6 +3,8 @@ import { handleUserInput } from '../orchestrator/orchestrator';
 
 const router = Router();
 
+import { handleError } from '../utils/errorHandler';
+
 router.post('/orchestrate', async (req, res) => {
     try {
         const { sessionId, transcript } = req.body;
@@ -15,8 +17,8 @@ router.post('/orchestrate', async (req, res) => {
         const response = await handleUserInput(sessionId, transcript);
         res.json(response);
     } catch (error) {
-        console.error("Error in orchestrator:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        const appError = handleError(error, 'API: /orchestrate');
+        res.status(500).json({ error: appError.userMessage });
     }
 });
 
@@ -35,16 +37,29 @@ router.post('/export-itinerary', async (req, res) => {
         console.log(`[API] Exporting itinerary for ${userEmail}`);
 
         // Generate PDF
-        const pdfBuffer = await generateItineraryPDF(itinerary);
+        let pdfBuffer;
+        try {
+            pdfBuffer = await generateItineraryPDF(itinerary);
+        } catch (pdfError) {
+            const appError = handleError(pdfError, 'PDF Generation');
+            res.status(500).json({ error: "I couldn't generate the PDF right now. Your plan is still safe." });
+            return;
+        }
 
         // Send Email
-        await sendItineraryEmail(userEmail, pdfBuffer);
+        try {
+            await sendItineraryEmail(userEmail, pdfBuffer);
+        } catch (emailError) {
+            const appError = handleError(emailError, 'Email Sending');
+            res.status(500).json({ error: "I created your itinerary, but I couldn't send the email. You can try again later." });
+            return;
+        }
 
         res.json({ status: 'success', message: 'Your itinerary has been sent to your email.' });
 
     } catch (error: any) {
-        console.error("Error in export-itinerary:", error);
-        res.status(500).json({ error: error.message || "Failed to export itinerary" });
+        const appError = handleError(error, 'API: /export-itinerary');
+        res.status(500).json({ error: appError.userMessage });
     }
 });
 

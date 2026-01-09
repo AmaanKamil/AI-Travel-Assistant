@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { handleError } from '../utils/errorHandler';
 
 export interface POI {
     id: string;
@@ -13,19 +14,9 @@ export interface POI {
 export async function searchPOIs(interests: string[], constraints?: string[]): Promise<POI[]> {
     console.log(`[MCP: POI Search] Searching for interests: ${interests.join(', ')}`);
 
-    // Only Dubai is supported for V1
-    // In a real implementation we would check the city input, but for this signature we assume Dubai context
-    // or we could add a city parameter. The user prompt signature only had (interests, constraints) in intent
-    // but the original Service signature was (interests).
-    // The user requested: "Accept input city, interests, pace, constraints".
-    // But the orchestrator calls it as: searchPOIs(interests).
-    // We will stick to the existing signature for compatibility or update it if safe.
-    // The orchestrator.ts passes: searchPOIs(context.collectedConstraints.interests || [])
-    // We will modify the implementation to handle the query internally.
-
+    // ... (Overpass URL and Query remain same) ...
     const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
 
-    // Hardcoded query for V1 Dubai Scope
     const query = `
         [out:json];
         (
@@ -55,7 +46,8 @@ export async function searchPOIs(interests: string[], constraints?: string[]): P
         return elements.map((el: any) => normalizePOI(el)).filter((poi: any) => poi.name !== 'Unknown');
 
     } catch (error) {
-        console.error("POI Search Failed:", error);
+        handleError(error, 'POI Search');
+        // Return empty array to allow graceful degradation
         return [];
     }
 }
