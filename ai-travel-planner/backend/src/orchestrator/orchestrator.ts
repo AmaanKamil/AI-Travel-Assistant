@@ -104,15 +104,30 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         context.itinerary = itinerary;
         debugLog.push(`Itinerary Built`);
 
-        // 3. Grounding Explanation (Mock RAG)
-        const explanation = await getGroundedAnswer("Why this plan?");
+        // 3. Grounding Explanation (Real RAG)
+        const explanation = await getGroundedAnswer(`Why is a trip to Dubai focused on ${interests.join(', ')} a good idea?`);
         debugLog.push(`Rationale: ${explanation.answer}`);
+        debugLog.push(`Citations: ${explanation.citations.length}`);
 
+        logTransition('PLANNING', 'EVALUATING');
+        context.currentState = 'EVALUATING';
         logTransition('PLANNING', 'EVALUATING');
         context.currentState = 'EVALUATING';
     }
 
-    // --- STATE HANDLER: EVALUATING ---
+    // --- STATE HANDLER: EXPLAINING ---
+    if (context.currentState === 'EXPLAINING') {
+        const explanation = await getGroundedAnswer(transcript);
+        responseMessage = explanation.answer;
+
+        // Add citations to debug log
+        if (explanation.citations.length > 0) {
+            debugLog.push(`Citations: ${JSON.stringify(explanation.citations)}`);
+        }
+
+        // After explaining, we usually go back to IDLE or wait for more
+        context.currentState = 'IDLE';
+    }
     if (context.currentState === 'EVALUATING') {
         if (context.itinerary) {
             const report = await runEvaluations(context.itinerary);
