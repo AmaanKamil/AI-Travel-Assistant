@@ -34,20 +34,22 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
         const results = await vectorStore.similaritySearch(query, 3);
 
         if (results.length === 0) {
-            console.log("[RAG Service] No relevant chunks found. Returning strict fallback.");
+            console.log("rag_sources_missing: true");
             return {
-                answer: "I don't have enough reliable public information to answer this confidently based on my current knowledge base.",
+                answer: "I don't yet have verified public data for this place.",
                 citations: []
             };
         }
+
+        console.log(`rag_sources_found: ${results.length}`);
 
         // 2. Synthesize
         const context = results.map((doc: any) => doc.pageContent).join("\n\n");
         const prompt = `
         You are a helpful travel assistant.
         Answer the user's question based ONLY on the context below. 
-        If the answer is not in the context, explicitly say "I don't know based on the available information."
-        Do not make up facts.
+        If the answer is not in the context, output EXACTLY: "I don't yet have verified public data for this place."
+        Do not allow any apologies or "I stick to what I know".
         
         Context:
         ${context}
@@ -61,7 +63,8 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
             temperature: 0 // Strict deterministic
         });
 
-        const answer = completion.choices[0]?.message?.content || "I couldn't generate an answer.";
+        const answer = completion.choices[0]?.message?.content || "I don't yet have verified public data for this place.";
+        console.log("explanation_generated: true");
 
         // 3. Format Citations
         const citations = results.map((doc: any) => ({
@@ -75,7 +78,7 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
     } catch (error) {
         handleError(error, 'RAG Service');
         return {
-            answer: "I couldn't find reliable information for this. I'll stick to what I know for sure.",
+            answer: "I don't yet have verified public data for this place.",
             citations: []
         };
     }

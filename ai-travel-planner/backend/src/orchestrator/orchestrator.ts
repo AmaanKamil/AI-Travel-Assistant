@@ -103,27 +103,33 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 if (changedConstraints) {
                     // Stay in CONFIRMING to re-read new constraints
                     nextState = 'CONFIRMING';
-                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Update Received)');
+                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING(Update)');
                 } else if (isAffirmative) {
                     nextState = 'PLANNING';
-                    logTransition(debugLog, 'CONFIRMING', 'PLANNING (User Confirmed)');
+                    // PLANNING is transient, so effectively next persistent state will be READY
+                    logTransition(debugLog, 'CONFIRMING', 'PLANNING');
                 } else {
                     // Ambiguous response? Ask again.
                     nextState = 'CONFIRMING';
-                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Waiting for Yes)');
+                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING(Waiting)');
                 }
                 break;
 
             case 'EDITING':
+                // Transient state, always returns to READY
                 nextState = 'READY';
+                logTransition(debugLog, 'EDITING', 'READY');
                 break;
 
             case 'PLANNING':
+                // Transient state, always returns to READY
                 nextState = 'READY';
+                logTransition(debugLog, 'PLANNING', 'READY');
                 break;
 
             case 'EXPORTING':
                 nextState = 'READY';
+                logTransition(debugLog, 'EXPORTING', 'READY');
                 break;
 
             default:
@@ -133,6 +139,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
         // 3. Execute State Actions (Transitions)
         if (nextState !== context.currentState) {
+            console.log(`state_transition: ${context.currentState} -> ${nextState}`);
             logTransition(debugLog, context.currentState, nextState);
             context.currentState = nextState as any;
         }
@@ -173,18 +180,22 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             // Grounding check
             const rationale = await getGroundedAnswer(`Why is a ${days} day trip to Dubai good?`);
 
+            // FORCE READY STATE
             responseMessage = `Here is your ${days}-day itinerary (Pace: ${pace}). ${rationale.answer}`;
 
-            // Move to READY
-            logTransition(debugLog, 'PLANNING', 'READY');
+            // Move to READY Immediately found in next tick, but setting it explicitly here for safety
             context.currentState = 'READY';
+            console.log("state_transition: PLANNING -> READY");
+            logTransition(debugLog, 'PLANNING', 'READY');
         }
 
         if (context.currentState === 'EDITING') {
             if (intent.editIntent && context.itinerary) {
+                console.log("edit_intent_detected: true");
                 const updated = await buildItineraryEdit(context.itinerary, intent.editIntent);
                 context.itinerary = updated;
                 responseMessage = `I've updated Day ${intent.editIntent.target_day}.`;
+                console.log("edit_applied: true");
             } else {
                 responseMessage = "I wasn't sure what to edit or no itinerary exists.";
             }
