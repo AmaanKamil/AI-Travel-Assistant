@@ -4,7 +4,9 @@ import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 import { handleError } from '../utils/errorHandler';
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 
 import { LocalEmbeddings } from "../rag/embeddings";
 
@@ -25,7 +27,7 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
     try {
         const vectorStore = await Chroma.fromExistingCollection(embeddings, {
             collectionName: "dubai_travel_knowledge",
-            url: "http://localhost:8000" // Expecting Chroma to be running here!
+            url: process.env.CHROMA_URL || "http://localhost:8000"
         });
 
         // 1. Retrieve
