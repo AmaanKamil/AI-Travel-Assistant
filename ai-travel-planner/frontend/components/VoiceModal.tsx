@@ -76,6 +76,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                 // Clear highlight after 2 seconds
                 setTimeout(() => setHighlightDay(null), 2000);
             }
+
+            // Play Voice
+            if (result.audio) {
+                playAudio(result.audio);
+            }
         }
         setIsProcessing(false);
     };
@@ -126,24 +131,33 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     }, [isListening]);
 
 
-    // TTS Effect
+    // TTS Playback Ref
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // Stop audio when component unmounts or new speech starts
     useEffect(() => {
-        if (!responseMessage) return;
-
-        // Cancel any ongoing speech
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(responseMessage);
-        utterance.lang = "en-US";
-        utterance.rate = 1.0;
-
-        // Mobile safari needs explicit interaction, but valid for most desktop checks
-        window.speechSynthesis.speak(utterance);
-
         return () => {
-            window.speechSynthesis.cancel();
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
         };
-    }, [responseMessage]);
+    }, []);
+
+    const playAudio = (base64Audio: string) => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+        }
+        if (!base64Audio) return;
+
+        try {
+            const audio = new Audio(`data:audio/mp3;base64,${base64Audio}`);
+            audioRef.current = audio;
+            audio.play().catch(e => console.error("Audio play error", e));
+        } catch (e) {
+            console.error("Invalid audio data", e);
+        }
+    };
 
     const startListening = () => {
         setResponseMessage("");

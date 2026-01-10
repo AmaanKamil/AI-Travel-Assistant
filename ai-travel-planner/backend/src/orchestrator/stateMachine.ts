@@ -1,50 +1,45 @@
 export type OrchestratorState =
     | 'IDLE'
-    | 'LISTENING'
-    | 'PARSING'
-    | 'CLARIFYING'
+    | 'COLLECTING_INFO' // Replaces CLARIFYING
     | 'CONFIRMING'
     | 'PLANNING'
-    | 'EVALUATING'
-    | 'PRESENTING'
+    | 'READY'          // Replaces PRESENTING/EVALUATING
     | 'EDITING'
-    | 'EXPLAINING'
     | 'EXPORTING'
+    | 'AMBIGUOUS'      // For when we don't know what to do (PARSING is internal, not a waiting state)
     | 'ERROR';
 
 export function getNextState(currentState: OrchestratorState, intentType: string): OrchestratorState {
+    // This helper is for default "happy path" transitions.
+    // Complex logic (like checking for missing fields) lives in the Orchestrator.
+
     switch (currentState) {
         case 'IDLE':
-            return 'PARSING';
+            return 'COLLECTING_INFO'; // Default start
 
-        case 'PARSING':
-            if (intentType === 'plan_trip') return 'CONFIRMING'; // Assuming simplified flow where parsing leads to confirm check
-            if (intentType === 'edit_itinerary') return 'EDITING';
-            if (intentType === 'ask_question') return 'EXPLAINING';
-            if (intentType === 'export') return 'EXPORTING';
-            return 'ERROR';
-
-        case 'CLARIFYING':
-            return 'CONFIRMING'; // After clarification, we confirm
+        case 'COLLECTING_INFO':
+            // Logic in orchestrator will determine if we stay here or move to CONFIRMING
+            return 'CONFIRMING';
 
         case 'CONFIRMING':
-            // In a real state machine, we'd check if user said "yes" or "no".
-            // For this v1 scaffold, we assume "confirm" -> PLAN
             return 'PLANNING';
 
         case 'PLANNING':
-            return 'EVALUATING';
+            return 'READY';
 
-        case 'EVALUATING':
-            // Logic would split here based on pass/fail, but the orchestrator handles the branch.
-            // The default "happy path" next state is presenting.
-            return 'PRESENTING';
+        case 'READY':
+            if (intentType === 'edit_itinerary') return 'EDITING';
+            if (intentType === 'export') return 'EXPORTING';
+            if (intentType === 'plan_trip') return 'COLLECTING_INFO'; // New trip
+            return 'READY'; // Stay ready if just chatting
 
-        case 'PRESENTING':
-            // From presenting, we can go back to parsing new input
-            return 'PARSING';
+        case 'EDITING':
+            return 'READY'; // Back to ready after edit
+
+        case 'EXPORTING':
+            return 'READY'; // Back to ready after export
 
         default:
-            return 'PARSING'; // Default fallback for stateless interaction
+            return 'IDLE';
     }
 }

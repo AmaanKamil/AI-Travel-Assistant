@@ -12,47 +12,54 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
     for (let i = 1; i <= days; i++) {
         const dailyBlocks: TimeBlock[] = [];
 
-        // Logic based on pace
-        // Relaxed: 1-2 major activities (Morning/Evening)
-        // Medium: 2-3 activities
-        // Packed: 3-4 activities
-
+        // Pace Logic Definition
         let slots = ['Morning', 'Afternoon', 'Evening'];
         if (pace === 'relaxed') {
-            slots = ['Morning', 'Evening']; // Skip afternoon heat or just less stuff
+            slots = ['Morning', 'Evening']; // Leisurely start, rest in afternoon, dinner/walk
         } else if (pace === 'packed') {
-            slots = ['Morning', 'Lunch', 'Afternoon', 'Evening'];
+            slots = ['Morning', 'Lunch', 'Afternoon', 'Early Evening', 'Late Night'];
         }
 
         for (const slot of slots) {
-            if (poiIndex >= pois.length) break;
-
-            let poi = pois[poiIndex];
-
-            // Deduplication Check (though simple linear scan avoids it mostly, but good for safety)
-            if (usedPOIs.has(poi.name)) {
+            // Find next unused POI
+            let poi = null;
+            while (poiIndex < pois.length) {
+                const candidate = pois[poiIndex];
+                if (!usedPOIs.has(candidate.name)) {
+                    poi = candidate;
+                    usedPOIs.add(candidate.name);
+                    poiIndex++;
+                    break;
+                }
                 poiIndex++;
-                if (poiIndex < pois.length) poi = pois[poiIndex];
-                else break;
             }
 
-            // Assign POI
-            dailyBlocks.push({
-                time: slot,
-                activity: `Visit ${poi.name}`,
-                duration: `${poi.estimated_visit_duration_minutes} mins`
-            });
-
-            usedPOIs.add(poi.name);
-            poiIndex++;
+            if (poi) {
+                dailyBlocks.push({
+                    time: slot,
+                    activity: `Visit ${poi.name}`,
+                    duration: pace === 'relaxed' ? '2.5 hours' : '90 mins'
+                });
+            } else {
+                // Feature: Global fallback if we run out of POIs
+                // Only add "Free Time" if it's not the ONLY thing in the day
+                if (dailyBlocks.length > 0) {
+                    dailyBlocks.push({
+                        time: slot,
+                        activity: "Free time to explore local souks or relax",
+                        duration: "Flexible"
+                    });
+                }
+                break; // Stop adding slots for this day if no POIs
+            }
         }
 
-        // Fallback if no POIs left
-        if (dailyBlocks.length === 0) {
+        // Ensure at least 2 activities per day if possible, or fill with fallback
+        if (dailyBlocks.length < 2) {
             dailyBlocks.push({
-                time: 'Morning',
-                activity: 'Free time to explore or relax at the hotel',
-                duration: '120 mins'
+                time: 'Afternoon',
+                activity: 'Relaxing walk at the Hotel/Resort',
+                duration: 'Unlimited'
             });
         }
 

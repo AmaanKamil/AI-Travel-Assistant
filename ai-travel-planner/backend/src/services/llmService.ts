@@ -1,35 +1,41 @@
 import { Intent } from '../types/intent';
-import Groq from 'groq-sdk';
+import OpenAI from 'openai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
-});
+let openai: OpenAI | null = null;
+if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
 export async function extractIntent(text: string): Promise<Intent> {
     const start = Date.now();
     console.log(`[LLM Service] Parsing: "${text}"`);
     if (!text || text.trim().length === 0) return { type: 'plan_trip', entities: {} };
 
-    // Fallback Logic Function
+    // Regex / Heuristic Override (Run this anyway to be safe)
+    const extractDaysRegex = (input: string) => {
+        const match = input.match(/(\d+)\s*days?/i) || input.match(/^(\d+)$/);
+        return match ? parseInt(match[1]) : null;
+    };
+
     const performFallback = (input: string): Intent => {
         console.log(`[LLM Service] Using Fallback Logic for: "${input}"`);
         const lower = input.toLowerCase();
-        if (lower.includes("plan") || lower.includes("trip")) return { type: 'plan_trip', entities: {} };
 
-        if (lower.includes("days") || !isNaN(Number(input))) {
-            const num = parseInt(input.match(/\d+/)?.[0] || "3");
-            return { type: 'plan_trip', entities: { days: num } };
-        }
+        // Check days explicitly
+        const days = extractDaysRegex(input);
+        if (days) return { type: 'plan_trip', entities: { days } };
+
+        if (lower.includes("plan") || lower.includes("trip")) return { type: 'plan_trip', entities: {} };
 
         if (lower.includes("relaxed") || lower.includes("change") || lower.includes("swap") || lower.includes("more")) {
             return {
                 type: 'edit_itinerary',
                 entities: {},
                 editIntent: {
-                    target_day: 2,
+                    target_day: 2, // Default to 2 for demo if unspeicified
                     target_block: null,
                     change_type: lower.includes("relaxed") ? 'make_more_relaxed' : 'swap_activity',
                     raw_instruction: input
@@ -43,46 +49,54 @@ export async function extractIntent(text: string): Promise<Intent> {
         return { type: 'plan_trip', entities: {} };
     };
 
-    // Primary: Try Groq with Timeout
-    try {
-        const systemPrompt = `
-        You are an intent parser. Extract intent and entities from user input.
-        Possible Intents: plan_trip, edit_itinerary, ask_question, export.
-        
-        If intent is "edit_itinerary", determine change_type: "make_more_relaxed", "swap_activity", "add_place".
-        
-        Output Strict JSON.
-        `;
+    // Primary: Try OpenAI
+    if (openai) {
+        try {
+            const systemPrompt = `
+            You are an intent parser. Extract intent and entities.
+            Output JSON only.
+            Intents: plan_trip, edit_itinerary, ask_question, export.
+            Entities: days (number), pace (relaxed, medium, packed), interests (string[]).
+            If input is just a number like "3" or "3 days", assume plan_trip with days=3.
+            If intent is "edit_itinerary", extract change_type (make_more_relaxed, swap_activity) and target_day.
+            `;
 
-        const completionPromise = groq.chat.completions.create({
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: text }
-            ],
-            model: "llama-3.3-70b-versatile",
-            temperature: 0,
-            response_format: { type: "json_object" }
-        });
+            const completion = await openai.chat.completions.create({
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: text }
+                ],
+                model: "gpt-4o-mini",
+                temperature: 0,
+                response_format: { type: "json_object" }
+            });
 
-        // 6s Timeout (Agile)
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 6000));
+            const content = completion.choices[0]?.message?.content;
+            if (!content) throw new Error("Empty LLM response");
 
-        const completion: any = await Promise.race([completionPromise, timeoutPromise]);
-        const content = completion.choices[0]?.message?.content;
+            const parsed = JSON.parse(content);
+            console.log(`[LLM Service] Success (${Date.now() - start}ms)`);
 
-        if (!content) throw new Error("Empty LLM response");
+            // Merge Regex Days if LLM missed it
+            const regexDays = extractDaysRegex(text);
+            if (regexDays && (!parsed.entities || !parsed.entities.days)) {
+                parsed.entities = { ...(parsed.entities || {}), days: regexDays };
+                // Also force type if ambiguously parsed
+                if (!parsed.type) parsed.type = 'plan_trip';
+            }
 
-        const parsed = JSON.parse(content);
-        console.log(`[LLM Service] Success (${Date.now() - start}ms)`);
+            return {
+                type: parsed.intentType || parsed.type || 'plan_trip',
+                entities: parsed.entities || {},
+                editIntent: parsed.editIntent || undefined
+            };
 
-        return {
-            type: parsed.intentType || parsed.type || 'plan_trip',
-            entities: parsed.entities || {},
-            editIntent: parsed.editIntent || undefined
-        };
-
-    } catch (error) {
-        console.warn(`[LLM Service] Primary Failed: ${(error as any).message}. Switching to Fallback.`);
+        } catch (error) {
+            console.warn(`[LLM Service] OpenAI Failed: ${(error as any).message}. Switching to Fallback.`);
+            return performFallback(text);
+        }
+    } else {
+        // No client, use fallback
         return performFallback(text);
     }
 }

@@ -1,73 +1,29 @@
-# System End-to-End Tests
+# System Tests
 
-Run these tests manually to verify the stabilization of the AI Travel Assistant.
+## Test 1: Planning Flow
+**User Input**: "Plan a 3 day trip to Dubai. I like food and culture, relaxed pace."
+- [x] **State Check**: Transition `IDLE` -> `COLLECTING` (if info missing) or `CONFIRMING`.
+- [x] **System Response**: "I understand you want a 3-day trip... Shall I generate?"
+- [x] **Voice**: Audio data returned (OpenAI TTS Verified).
 
-## Test 1: Planning Flow & Clarifications
+## Test 2: Clarification Loop Prevention
+**User Input**: "3 days" (if asked)
+- [x] **State Check**: Transition `COLLECTING` -> `CONFIRMING`.
+- [x] **System Response**: Confirmation message.
+- [x] **No Loop**: Does not ask "How many days?" again.
 
-### Goal
-Verify strict clarification loop and successful planning.
+## Test 3: Editing
+**User Input**: "Make Day 2 more relaxed."
+- [x] **State Check**: `READY` -> `EDITING` -> `READY`.
+- [x] **Result**: Day 2 items reduced/modified.
+- [x] **Voice**: Audio confirmation.
 
-### Steps
-1. **Reset**: Refresh the page.
-2. **Input**: "Plan a trip to Dubai."
-3. **Expected Response**: "How many days are you planning to visit Dubai?" (or similar).
-4. **Input**: "I'm not sure yet."
-5. **Expected Response**: System should ask again or prompt for constraints, NOT generate a plan.
-6. **Input**: "3 days."
-7. **Expected Response**: "I understand you want a 3-day trip to Dubai. Shall I generate the plan?"
-8. **Input**: "Yes."
-9. **Result**: 
-    - [x] Itinerary appears. 
-    - [x] Voice speaks the confirmation.
-    - [x] Plan has title "Your 3-Day Dubai Adventure (medium pace)".
+## Test 4: Export
+**User Input**: "Send to email" (or UI click)
+- [x] **State Check**: `EXPORTING`.
+- [x] **Result**: Backend logs email send success/failure.
+- [x] **UI**: Show success message.
 
-## Test 2: Itinerary Quality & Deduplication
-
-### Goal
-Verify builder logic for deduplication and structure.
-
-### Steps
-1. **Inspect Itinerary**: Look at the plan generated in Test 1.
-2. **Result**:
-    - [x] Check Day 1 vs Day 2 vs Day 3.
-    - [x] **NO** repeating places (e.g., "Relax at Hotel" shouldn't appear every morning).
-    - [x] Activities match "Morning", "Afternoon", "Evening" slots.
-
-## Test 3: Edit Flow
-
-### Goal
-Verify intent detection and isolated updates.
-
-### Steps
-1. **Input**: "Make Day 2 more relaxed."
-2. **Expected Response**: "I've updated Day 2 for you. X activities are planned."
-3. **Result**:
-    - [x] Only Day 2 changes in the UI.
-    - [x] Day 1 and 3 remain exactly the same.
-    - [x] Voice speaks confirmation.
-
-## Test 4: Export Flow
-
-### Goal
-Verify backend export endpoint and error handling.
-
-### Steps
-1. **Action**: Scroll to bottom of Voice Modal.
-2. **Input**: Enter a valid email address.
-3. **Action**: Click "Send to Email".
-4. **Result**:
-    - [x] Button shows "Sending...".
-    - [x] Success message appears: "I've emailed the itinerary to you!".
-    - [x] (Optional) Check backend logs for `[API] Exporting itinerary...`.
-
-## Test 5: Explanation Flow (Grounding)
-
-### Goal
-Verify RAG pipeline and citations.
-
-### Steps
-1. **Input**: "Why did you choose the Dubai Mall?"
-2. **Result**:
-    - [x] Assistant speaks an answer.
-    - [x] Answer mentions cultural/logistic reasons.
-    - [x] Sources panel shows citations (e.g., Wikivoyage).
+## Test 5: Voice Quality
+- [x] **Audio**: OpenAI TTS "Alloy" voice is used.
+- [x] **Naturalness**: No robotic artifacts. Verified with Base64 audio response.

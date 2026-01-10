@@ -5,6 +5,8 @@ const router = Router();
 
 import { handleError } from '../utils/errorHandler';
 
+import { generateSpeech } from '../services/ttsService';
+
 router.post('/orchestrate', async (req, res) => {
     try {
         const { sessionId, transcript } = req.body;
@@ -15,7 +17,14 @@ router.post('/orchestrate', async (req, res) => {
         }
 
         const response = await handleUserInput(sessionId, transcript);
-        res.json(response);
+
+        // Generate Voice Audio
+        let audioData = null;
+        if (response.message) {
+            audioData = await generateSpeech(response.message);
+        }
+
+        res.json({ ...response, audio: audioData });
     } catch (error) {
         const appError = handleError(error, 'API: /orchestrate');
         res.status(500).json({ error: appError.userMessage });
