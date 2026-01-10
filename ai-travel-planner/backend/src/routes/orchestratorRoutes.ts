@@ -34,6 +34,71 @@ router.post('/orchestrate', async (req, res) => {
 import { generateItineraryPDF } from '../services/pdfService';
 import { sendItineraryEmail } from '../services/emailService';
 
+import { parseEditIntent, applyEdit } from '../services/editEngine';
+import { getSession, saveSession } from '../orchestrator/sessionContext';
+
+router.post('/edit-itinerary', async (req, res) => {
+    try {
+        const { sessionId, editCommand } = req.body;
+        console.log(`[API] edit_request_received for Session: ${sessionId}`);
+
+        if (!sessionId || !editCommand) {
+            res.status(400).json({ status: 'error', message: "Missing sessionId or editCommand" });
+            return;
+        }
+
+        // 1. Load Session
+        const context = getSession(sessionId);
+        if (!context || !context.itinerary) {
+            console.log(`[API] No itinerary found for session ${sessionId}`);
+            res.status(400).json({ status: 'error', message: "Let's create a trip plan first before editing it." });
+            return;
+        }
+        console.log(`[API] itinerary_loaded for Session: ${sessionId}`);
+
+        // 2. Parse Intent
+        const intent = parseEditIntent(editCommand);
+        console.log(`[API] edit_intent_parsed: ${intent.type} on Day ${intent.targetDay}`);
+
+        if (intent.type === 'unknown') {
+            res.json({ status: 'error', message: "I couldn't understand what you want to change. Try saying for example: Make Day 2 more relaxed." });
+            return;
+        }
+
+        // 3. Apply Edit
+        const result = applyEdit(context.itinerary, intent);
+        console.log(`[API] edit_applied: Success=${result.success}`);
+
+        if (result.success && result.updatedItinerary) {
+            // 4. Save Session
+            context.itinerary = result.updatedItinerary;
+            saveSession(context);
+            console.log(`[API] itinerary_saved for Session: ${sessionId}`);
+
+            // 5. Generate Audio (Optional/Helper)
+            let audioData = null;
+            if (result.message) {
+                audioData = await generateSpeech(result.message);
+            }
+
+            console.log(`[API] response_sent`);
+            res.json({
+                status: 'success',
+                updatedItinerary: result.updatedItinerary,
+                message: result.message,
+                audio: audioData
+            });
+        } else {
+            res.json({ status: 'error', message: result.message });
+        }
+
+    } catch (error) {
+        const appError = handleError(error, 'API: /edit-itinerary');
+        res.status(500).json({ status: 'error', message: appError.userMessage });
+    }
+});
+
+
 router.post('/export-itinerary', async (req, res) => {
     try {
         const { itinerary, userEmail } = req.body;

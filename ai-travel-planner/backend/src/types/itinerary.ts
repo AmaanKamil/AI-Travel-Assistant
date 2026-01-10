@@ -12,4 +12,6 @@ export interface TimeBlock {
     time: string;
     activity: string;
     duration?: string;
+    description?: string;
+    isFlexible?: boolean;
 }

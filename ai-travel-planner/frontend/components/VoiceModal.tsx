@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Mic, X, Loader2, MessageSquare, Mail } from "lucide-react";
 import TranscriptBox from "./TranscriptBox";
-import { orchestrateTrip, exportItinerary } from "@/lib/api";
+import { orchestrateTrip, exportItinerary, editItinerary } from "@/lib/api";
 import ItineraryView from "./ItineraryView";
 import SourcesPanel from "./SourcesPanel";
 import PlanningChecks from "./PlanningChecks";
@@ -52,8 +52,18 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         if (!text) return;
 
         setIsProcessing(true);
-        // Call backend
-        const result = await orchestrateTrip("ui-demo", text) as any;
+        let result: any;
+
+        // CLIENT-SIDE ROUTING (Strict Separation)
+        const isEditIntent = /make|change|swap|add|remove|replace|relax/i.test(text);
+
+        if (isEditIntent && displayItinerary) {
+            console.log("Routing to /edit-itinerary");
+            result = await editItinerary("ui-demo", text);
+        } else {
+            console.log("Routing to /orchestrate");
+            result = await orchestrateTrip("ui-demo", text);
+        }
 
         if (result.error) {
             setResponseMessage(result.message || "Something went wrong.");
@@ -71,9 +81,12 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             }
 
             // Handle Edit Highlighting
-            if (result.editIntent && result.editIntent.target_day) {
-                setHighlightDay(result.editIntent.target_day);
-                // Clear highlight after 2 seconds
+            // Note: Backend might return target_day in message or update, 
+            // but for now let's just highlight if regex detects a day
+            const dayMatch = text.match(/day\s*(\d+)/i);
+            if (dayMatch) {
+                const dayNum = parseInt(dayMatch[1]);
+                setHighlightDay(dayNum);
                 setTimeout(() => setHighlightDay(null), 2000);
             }
 
@@ -298,4 +311,3 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         </div>
     );
 }
-
