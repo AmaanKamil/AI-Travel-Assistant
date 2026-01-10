@@ -82,8 +82,25 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 break;
 
             case 'CONFIRMING':
-                // User said "Yes" or we have all info
-                nextState = 'PLANNING';
+                // STRICT RULE: Only transition to PLANNING if user says "YES"
+                // If user updates constraints (e.g., "actually 4 days"), we stay in CONFIRMING or go back to COLLECTING
+
+                // We check if the intent was 'plan_trip' (which might be "yes") or simple agreement
+                const isAffirmative = /yes|sure|ok|correct|go ahead|please|build/i.test(transcript);
+
+                // If user provided new constraints, allow update (orchestrator already merged them at top)
+                const changedConstraints = intent.entities && Object.keys(intent.entities).length > 0;
+
+                if (changedConstraints) {
+                    // Stay in CONFIRMING to re-read new constraints
+                    nextState = 'CONFIRMING';
+                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Update)');
+                } else if (isAffirmative) {
+                    nextState = 'PLANNING';
+                } else {
+                    // Ambiguous response? Ask again.
+                    nextState = 'CONFIRMING';
+                }
                 break;
 
             case 'EDITING':

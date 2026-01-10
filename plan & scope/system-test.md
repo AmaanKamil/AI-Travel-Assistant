@@ -43,3 +43,10 @@
 **User Input**: "Add a school" 
 - [x] **Result**: System should reply "I can't add that" OR ignore and add a safe default.
 - [x] **Forbidden**: Itinerary contains "School".
+
+## Test 10: Geographic Logic (Day Clustering)
+**User Input**: "Plan 3 days"
+- [x] **Day 1**: Must be primarily **Downtown** (Burj Khalifa, Mall).
+- [x] **Day 2**: Must be primarily **Old Dubai** (Fahidi, Creek).
+- [x] **Day 3**: Must be primarily **Marina** or **Jumeirah**.
+- [x] **Result**: No "Desert Safari" on Day 1 Morning (Geographic conflict).
