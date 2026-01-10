@@ -11,22 +11,33 @@ export interface POI {
     image?: string;
 }
 
+const DUBAI_TOP_10_SEEDS: POI[] = [
+    { id: 'seed-1', name: 'Burj Khalifa', category: 'attraction', estimated_visit_duration_minutes: 120, location: { lat: 25.1972, lng: 55.2744 }, metadata: { description: 'The tallest building in the world.', source: 'Seed', indoor: true, best_time: 'evening' } },
+    { id: 'seed-2', name: 'The Dubai Mall', category: 'attraction', estimated_visit_duration_minutes: 180, location: { lat: 25.1988, lng: 55.2796 }, metadata: { description: 'World\'s largest shopping mall.', source: 'Seed', indoor: true, best_time: 'afternoon' } },
+    { id: 'seed-3', name: 'Dubai Fountain', category: 'attraction', estimated_visit_duration_minutes: 30, location: { lat: 25.197, lng: 55.27 }, metadata: { description: 'World\'s largest choreographed fountain system.', source: 'Seed', indoor: false, best_time: 'evening' } },
+    { id: 'seed-4', name: 'Palm Jumeirah', category: 'landmark', estimated_visit_duration_minutes: 120, location: { lat: 25.1124, lng: 55.1390 }, metadata: { description: 'Iconic palm-shaped artificial island.', source: 'Seed', indoor: false, best_time: 'morning' } },
+    { id: 'seed-5', name: 'Al Fahidi Historical District', category: 'historic_site', estimated_visit_duration_minutes: 90, location: { lat: 25.2630, lng: 55.3003 }, metadata: { description: 'Traditional heritage area.', source: 'Seed', indoor: false, best_time: 'morning' } },
+    { id: 'seed-6', name: 'Dubai Creek', category: 'waterfront', estimated_visit_duration_minutes: 60, location: { lat: 25.26, lng: 55.30 }, metadata: { description: 'Historic saltwater creek.', source: 'Seed', indoor: false, best_time: 'evening' } },
+    { id: 'seed-7', name: 'Jumeirah Mosque', category: 'mosque', estimated_visit_duration_minutes: 45, location: { lat: 25.2336, lng: 55.2778 }, metadata: { description: 'Famous mosque open to non-Muslims.', source: 'Seed', indoor: true, best_time: 'morning' } },
+    { id: 'seed-8', name: 'Souk Madinat Jumeirah', category: 'souk', estimated_visit_duration_minutes: 90, location: { lat: 25.133, lng: 55.185 }, metadata: { description: 'Modern souk with traditional vibe.', source: 'Seed', indoor: true, best_time: 'evening' } },
+    { id: 'seed-9', name: 'Burj Al Arab', category: 'landmark', estimated_visit_duration_minutes: 60, location: { lat: 25.1412, lng: 55.1853 }, metadata: { description: 'Luxury hotel icon.', source: 'Seed', indoor: true, best_time: 'afternoon' } },
+    { id: 'seed-10', name: 'Desert Safari', category: 'desert_experience', estimated_visit_duration_minutes: 240, location: { lat: 24.8, lng: 55.5 }, metadata: { description: 'Dune bashing and dinner.', source: 'Seed', indoor: false, best_time: 'evening' } }
+];
+
 export async function searchPOIs(interests: string[], constraints?: string[]): Promise<POI[]> {
     console.log(`[MCP: POI Search] Searching for interests: ${interests.join(', ')}`);
 
-    // ... (Overpass URL and Query remain same) ...
     const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
-
     const query = `
         [out:json];
         (
           node["tourism"="museum"](24.8,54.9,25.4,55.6);
           node["tourism"="attraction"](24.8,54.9,25.4,55.6);
           node["historic"](24.8,54.9,25.4,55.6);
-          node["amenity"="restaurant"](24.8,54.9,25.4,55.6);
-          node["tourism"="gallery"](24.8,54.9,25.4,55.6);
+          node["tourism"="viewpoint"](24.8,54.9,25.4,55.6);
+          node["leisure"="park"](24.8,54.9,25.4,55.6);
         );
-        out center 50;
+        out center 100;
     `;
 
     try {
@@ -36,59 +47,115 @@ export async function searchPOIs(interests: string[], constraints?: string[]): P
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
-        if (!response.ok) {
-            throw new Error(`Overpass API Error: ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`Overpass API Error: ${response.statusText}`);
 
         const data = await response.json();
         const elements = (data as any).elements || [];
 
-        return elements.map((el: any) => normalizePOI(el)).filter((poi: any) => poi.name !== 'Unknown');
+        // Normalize and Filter
+        const osmPOIs = elements
+            .map((el: any) => normalizePOI(el))
+            .filter((poi: POI | null) => poi !== null) as POI[];
+
+        // Merge Scripts + OSM
+        const allPOIs = [...DUBAI_TOP_10_SEEDS, ...osmPOIs];
+
+        // Final Relevance Scoring & Sorting
+        const scoredPOIs = allPOIs.map(poi => ({
+            ...poi,
+            score: calculateRelevance(poi, interests)
+        })).sort((a, b) => b.score - a.score);
+
+        console.log(`[MCP: POI Search] Returned ${scoredPOIs.length} valid POIs.`);
+        return scoredPOIs;
 
     } catch (error) {
         handleError(error, 'POI Search');
-        // Return empty array to allow graceful degradation
-        return [];
+        return DUBAI_TOP_10_SEEDS; // Fail safe to seeds
     }
 }
 
-function normalizePOI(el: any): POI {
+function calculateRelevance(poi: POI, interests: string[]): number {
+    let score = 10; // Base score
+
+    // 1. Seed Bonus
+    if (poi.metadata.source === 'Seed') score += 50;
+
+    // 2. Category Bonus
+    if (['attraction', 'landmark'].includes(poi.category)) score += 20;
+    if (['museum', 'historic_site', 'souk'].includes(poi.category)) score += 15;
+    if (['theme_park', 'waterfront'].includes(poi.category)) score += 10;
+
+    // 3. Name Relevance (Simple Keyword Match)
+    if (interests.some(int => poi.name.toLowerCase().includes(int.toLowerCase()))) {
+        score += 30;
+    }
+    if (interests.some(int => poi.category.toLowerCase().includes(int.toLowerCase()))) {
+        score += 15;
+    }
+
+    // 4. Penalties for Generics if not caught by filter
+    if (poi.name.toLowerCase().includes("office") || poi.name.toLowerCase().includes("store")) {
+        score -= 50;
+    }
+
+    return score;
+}
+
+function normalizePOI(el: any): POI | null {
     const tags = el.tags || {};
     const name = tags.name || tags['name:en'] || 'Unknown';
 
-    // Category Mapping
-    let category = 'attraction';
+    // --- 1. HARD EXCLUSION RULES ---
+    const BLOCKED_KEYWORDS = [
+        'school', 'university', 'college', 'kindergarten',
+        'hospital', 'clinic', 'medical', 'dental', 'pharmacy',
+        'police', 'station', 'fire',
+        'parking', 'garage',
+        'office', 'admin', 'headquarters',
+        'residence', 'apartment', 'villa',
+        'supermarket', 'grocery', 'hypermarket',
+        'pizza hut', 'mcdonald', 'kfc', 'subway', 'burger king', 'starbucks', 'costa', 'tim hortons', 'domino'
+    ];
+
+    if (BLOCKED_KEYWORDS.some(kw => name.toLowerCase().includes(kw))) {
+        return null; // DROP IMMEDIATELY
+    }
+
+    // --- 2. CATEGORY ALLOWLIST ---
+    let category = 'other';
     if (tags.tourism === 'museum') category = 'museum';
-    else if (tags.tourism === 'gallery') category = 'gallery';
-    else if (tags.historic) category = 'historic_site';
-    else if (tags.amenity === 'restaurant') category = 'restaurant';
+    else if (tags.tourism === 'attraction') category = 'attraction';
+    else if (tags.tourism === 'viewpoint') category = 'viewpoint';
+    else if (tags.tourism === 'theme_park') category = 'theme_park';
+    else if (tags.tourism === 'gallery') category = 'museum'; // Group galleries
+    else if (tags.historic || tags.heritage) category = 'historic_site';
+    else if (tags.leisure === 'park') category = 'park';
+    else if (name.toLowerCase().includes('souk')) category = 'souk';
+    else if (name.toLowerCase().includes('beach')) category = 'beach';
+    else if (name.toLowerCase().includes('mall')) category = 'mall';
+    else if (name.toLowerCase().includes('mosque')) category = 'mosque';
+
+    const ALLOWED_CATEGORIES = ['museum', 'attraction', 'viewpoint', 'theme_park', 'historic_site', 'park', 'souk', 'beach', 'mall', 'mosque', 'landmark', 'waterfront', 'desert_experience'];
+
+    if (!ALLOWED_CATEGORIES.includes(category)) {
+        return null; // DROP IF NOT ALLOWED
+    }
 
     // Heuristics
-    const isIndoor = ['museum', 'gallery', 'restaurant'].includes(category);
+    const isIndoor = ['museum', 'mall', 'souk', 'mosque'].includes(category);
+    const bestTime = isIndoor ? 'afternoon' : 'evening'; // Default logic
 
-    // Time of Day
-    // Simple heuristic: Outdoor activity in Dubai => Evening preferred due to heat
-    const bestTime = isIndoor ? 'morning' : 'evening';
-
-    // Duration Logic
-    let duration = 45;
-    switch (category) {
-        case 'museum': duration = 90; break;
-        case 'gallery': duration = 60; break;
-        case 'historic_site': duration = 60; break;
-        case 'restaurant': duration = 75; break;
-        case 'attraction': duration = 90; break;
-    }
+    let duration = 60;
+    if (category === 'museum') duration = 90;
+    if (category === 'theme_park') duration = 240;
 
     return {
         id: `osm-${el.id}`,
         name: name,
         category: category,
         estimated_visit_duration_minutes: duration,
-        location: {
-            lat: el.lat,
-            lng: el.lon
-        },
+        location: { lat: el.lat, lng: el.lon },
         metadata: {
             description: `A ${category} in Dubai.`,
             source: 'OpenStreetMap',

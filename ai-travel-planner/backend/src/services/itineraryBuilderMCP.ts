@@ -1,65 +1,122 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
 import { EditIntent } from '../types/intent';
 
+// Helper to identify "Iconic" POIs (Seeds or High Score)
+const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
+
 export async function buildItinerary(pois: any[], days: number, pace: string = 'medium'): Promise<Itinerary> {
     console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} POIs. Pace: ${pace}`);
 
     const plans: DayPlan[] = [];
-    const usedPOIs = new Set<string>();
+    const usedPOI_IDs = new Set<string>(); // Global Deduplication Trackers
 
-    let poiIndex = 0;
+    // 1. Separate POIs into Tiers
+    const iconicPOIs = pois.filter(p => isIconic(p));
+    const standardPOIs = pois.filter(p => !isIconic(p));
+
+    // Sort Iconic by Score Descending
+    iconicPOIs.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    let iconicIndex = 0;
+    let standardIndex = 0;
 
     for (let i = 1; i <= days; i++) {
         const dailyBlocks: TimeBlock[] = [];
 
-        // Pace Logic Definition
         let slots = ['Morning', 'Afternoon', 'Evening'];
+        let maxItems = 3;
+
         if (pace === 'relaxed') {
-            slots = ['Morning', 'Evening']; // Leisurely start, rest in afternoon, dinner/walk
+            slots = ['Morning', 'Late Afternoon', 'Dinner'];
+            maxItems = 3;
         } else if (pace === 'packed') {
-            slots = ['Morning', 'Lunch', 'Afternoon', 'Early Evening', 'Late Night'];
+            slots = ['Morning', 'Lunch', 'Afternoon', 'Sunset', 'Dinner'];
+            maxItems = 5;
         }
+
+        let dayItemCount = 0;
+        let dayHasIconic = false;
+        let dayHasCultural = false;
 
         for (const slot of slots) {
-            // Find next unused POI
-            let poi = null;
-            while (poiIndex < pois.length) {
-                const candidate = pois[poiIndex];
-                if (!usedPOIs.has(candidate.name)) {
-                    poi = candidate;
-                    usedPOIs.add(candidate.name);
-                    poiIndex++;
-                    break;
+            if (dayItemCount >= maxItems) break;
+
+            let selectedPOI = null;
+
+            // RULE: Allocating the FIRST slot of the day to an ICONIC POI if possible
+            if (!dayHasIconic && iconicIndex < iconicPOIs.length) {
+                // Find next unused Iconic
+                while (iconicIndex < iconicPOIs.length) {
+                    const candidate = iconicPOIs[iconicIndex];
+                    if (!usedPOI_IDs.has(candidate.id)) {
+                        selectedPOI = candidate;
+                        usedPOI_IDs.add(candidate.id);
+                        dayHasIconic = true;
+                        iconicIndex++;
+                        break;
+                    }
+                    iconicIndex++;
                 }
-                poiIndex++;
             }
 
-            if (poi) {
+            // If no iconic selected (or already have one), try standard POIs
+            if (!selectedPOI) {
+                while (standardIndex < standardPOIs.length) {
+                    const candidate = standardPOIs[standardIndex];
+                    if (!usedPOI_IDs.has(candidate.id)) {
+                        selectedPOI = candidate;
+                        usedPOI_IDs.add(candidate.id);
+                        standardIndex++;
+                        break;
+                    }
+                    standardIndex++;
+                }
+            }
+
+            // Fallback: If ran out of standard, try remaining Iconics
+            if (!selectedPOI && iconicIndex < iconicPOIs.length) {
+                while (iconicIndex < iconicPOIs.length) {
+                    const candidate = iconicPOIs[iconicIndex];
+                    if (!usedPOI_IDs.has(candidate.id)) {
+                        selectedPOI = candidate;
+                        usedPOI_IDs.add(candidate.id);
+                        dayHasIconic = true;
+                        iconicIndex++;
+                        break;
+                    }
+                    iconicIndex++;
+                }
+            }
+
+            if (selectedPOI) {
                 dailyBlocks.push({
                     time: slot,
-                    activity: `Visit ${poi.name}`,
-                    duration: pace === 'relaxed' ? '2.5 hours' : '90 mins'
+                    activity: `Visit ${selectedPOI.name}`,
+                    duration: pace === 'relaxed' ? '2-3 hours' : '90 mins'
                 });
-            } else {
-                // Feature: Global fallback if we run out of POIs
-                // Only add "Free Time" if it's not the ONLY thing in the day
-                if (dailyBlocks.length > 0) {
-                    dailyBlocks.push({
-                        time: slot,
-                        activity: "Free time to explore local souks or relax",
-                        duration: "Flexible"
-                    });
+                dayItemCount++;
+
+                // Track Attributes
+                if (/museum|souk|mosque|heritage|art|culture|history/i.test(selectedPOI.category) ||
+                    /museum|souk|mosque|heritage|art|culture|history/i.test(selectedPOI.name)) {
+                    dayHasCultural = true;
                 }
-                break; // Stop adding slots for this day if no POIs
             }
         }
 
-        // Ensure at least 2 activities per day if possible, or fill with fallback
+        // POST-DAY VALIDATION & REPAIRS
+
+        // Ensure Cultural (if it's missing globally, we might force it, but let's check day level)
+        // If we extracted a Cultural POI during generation, great.
+        // The Request requires "At least one cultural experience in the FULL trip".
+        // We defer strict Day 1 injection if missing later, or rely on POI mix.
+
+        // Ensure at least 2 items
         if (dailyBlocks.length < 2) {
             dailyBlocks.push({
-                time: 'Afternoon',
-                activity: 'Relaxing walk at the Hotel/Resort',
-                duration: 'Unlimited'
+                time: 'Evening',
+                activity: 'Walk along the Dubai Water Canal',
+                duration: '1 hour'
             });
         }
 
@@ -67,6 +124,19 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             day: i,
             blocks: dailyBlocks
         });
+    }
+
+    // TRIP-LEVEL VALIDATION
+    // Check if whole trip has cultural item
+    const tripHasCultural = plans.some(d => d.blocks.some(b => /museum|souk|mosque|heritage/i.test(b.activity)));
+
+    if (!tripHasCultural && plans.length > 0) {
+        // Force Inject Cultural into Day 1 Morning
+        plans[0].blocks[0] = {
+            time: 'Morning',
+            activity: 'Visit Dubai Museum & Al Fahidi Fort (Cultural Mandate)',
+            duration: '2 hours'
+        };
     }
 
     return {

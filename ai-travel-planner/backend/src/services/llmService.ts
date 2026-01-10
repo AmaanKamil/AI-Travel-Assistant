@@ -56,9 +56,15 @@ export async function extractIntent(text: string): Promise<Intent> {
             You are an intent parser. Extract intent and entities.
             Output JSON only.
             Intents: plan_trip, edit_itinerary, ask_question, export.
+            
+            Rules:
+            1. If user wants to "change", "swap", "make more relaxed", "make packed", or mentions a specific "Day X", classify as "edit_itinerary".
+            2. If user provides "days", "pace", or "interests" for a NEW trip, classify as "plan_trip".
+            3. "3 days" -> plan_trip { days: 3 }.
+            4. "Relaxed" -> plan_trip { pace: "relaxed" }.
+            
             Entities: days (number), pace (relaxed, medium, packed), interests (string[]).
-            If input is just a number like "3" or "3 days", assume plan_trip with days=3.
-            If intent is "edit_itinerary", extract change_type (make_more_relaxed, swap_activity) and target_day.
+            If intent is "edit_itinerary", extract change_type (make_more_relaxed, swap_activity, add_place) and target_day (number).
             `;
 
             const completion = await openai.chat.completions.create({
@@ -83,6 +89,24 @@ export async function extractIntent(text: string): Promise<Intent> {
                 parsed.entities = { ...(parsed.entities || {}), days: regexDays };
                 // Also force type if ambiguously parsed
                 if (!parsed.type) parsed.type = 'plan_trip';
+            }
+
+            // HEURISTIC OVERRIDE: Strict Regex Priority
+            // If user mentions "Day X" modification, force Edit regardless of LLM output
+            if (/make day \d/i.test(text) || /change day \d/i.test(text) || /swap/i.test(text) || /make .* relaxed/i.test(text)) {
+                console.log("[LLM Service] Overriding LLM to EDIT_ITINERARY based on regex.");
+                parsed.type = 'edit_itinerary';
+                parsed.intentType = 'edit_itinerary';
+                parsed.intent = 'edit_itinerary'; // Cover all bases
+
+                // Extract target day if missing
+                const dayMatch = text.match(/day (\d+)/i);
+                if (dayMatch && (!parsed.editIntent || !parsed.editIntent.target_day)) {
+                    parsed.editIntent = {
+                        target_day: parseInt(dayMatch[1]),
+                        change_type: text.includes("relaxed") ? 'make_more_relaxed' : 'swap_activity'
+                    };
+                }
             }
 
             return {

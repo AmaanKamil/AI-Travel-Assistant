@@ -60,44 +60,41 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 break;
 
             case 'COLLECTING_INFO':
-                // We just received an answer (hopefully)
-                if (context.collectedConstraints.days) {
+                // AUTO-CORRECTION: If too many attempts, force defaults
+                if (context.clarificationCount > 6) {
+                    if (!context.collectedConstraints.days) context.collectedConstraints.days = 3;
+                    if (!context.collectedConstraints.pace) context.collectedConstraints.pace = 'medium';
                     nextState = 'CONFIRMING';
+                    logTransition(debugLog, 'COLLECTING_INFO', 'CONFIRMING (Forced)');
+                    break;
+                }
+
+                // SEQUENCE: Days -> Pace -> Interests
+                if (!context.collectedConstraints.days) {
+                    nextState = 'COLLECTING_INFO';
+                    // Will generate question for days below
+                } else if (!context.collectedConstraints.pace) {
+                    nextState = 'COLLECTING_INFO';
+                    // Will generate question for pace below
                 } else {
-                    // Still missing info?
-                    // Count retries? For now, ask again or default.
-                    // If stuck, default to 3 days to break loop
-                    if (context.clarificationCount > 2) {
-                        context.collectedConstraints.days = 3;
-                        debugLog.push("Auto-defaulting days to 3 to break loop.");
-                        nextState = 'CONFIRMING';
-                    } else {
-                        // Stay in COLLECTING
-                        nextState = 'COLLECTING_INFO';
-                    }
+                    nextState = 'CONFIRMING';
                 }
                 break;
 
             case 'CONFIRMING':
-                // User said "Yes" or confirmed constraints
+                // User said "Yes" or we have all info
                 nextState = 'PLANNING';
                 break;
 
             case 'EDITING':
-                // We are here if previous turn was EDITING? No, EDITING is transient in this design.
-                // If we enter this switch, it means we are WAITING for input?
-                // Actually, EDITING usually happens immediately. 
-                // Let's treat EDITING as an immediate action, not a waiting state.
                 nextState = 'READY';
                 break;
 
             case 'PLANNING':
-                // Should have auto-transitioned.
                 nextState = 'READY';
                 break;
 
             default:
-                // Recover
                 nextState = 'IDLE';
                 break;
         }
@@ -110,27 +107,37 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
         // 4. Handle State Behavior (Generators)
         if (context.currentState === 'COLLECTING_INFO') {
-            responseMessage = "How many days are you planning to visit Dubai?";
+            // Generate ONE question based on priority
+            if (!context.collectedConstraints.days) {
+                responseMessage = "To plan the best trip, I first need to know: How many days are you visiting?";
+            } else if (!context.collectedConstraints.pace) {
+                // Explicitly ask for pace if missing
+                responseMessage = "Got it. And what pace do you prefer? (Relaxed, Medium, or Packed?)";
+            } else {
+                // Should have transitioned, but safe fallback
+                responseMessage = "I have everything I need. Ready to build?";
+            }
             context.clarificationCount++;
         }
 
         if (context.currentState === 'CONFIRMING') {
-            responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai. Shall I generate the plan?`;
-            // Crucial: The NEXT user input needs to trigger PLANNING. 
+            const pace = context.collectedConstraints.pace || 'medium';
+            responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai at a ${pace} pace. Shall I generate the plan?`;
+            // Crucial: The NEXT user input needs to trigger PLANNING.
             // Current Transition Logic: IDLE -> CONFIRMING.
             // If we stop here, we wait for "Yes".
-            // If user says "Yes", next turn state is CONFIRMING. 
+            // If user says "Yes", next turn state is CONFIRMING.
             // Switch(CONFIRMING) -> matches -> transition to PLANNING.
             // Correct.
         }
 
         if (context.currentState === 'PLANNING') {
             const days = context.collectedConstraints.days || 3;
-            responseMessage = `Generating your ${days}-day itinerary...`; // Placeholder, real generation happens
+            // responseMessage is built at end
 
             const pois = await searchPOIs(context.collectedConstraints.interests || []);
             const pace = context.collectedConstraints.pace || 'medium';
-            const itinerary = await buildItinerary(pois, days, pace); // Updated signature
+            const itinerary = await buildItinerary(pois, days, pace);
 
             context.itinerary = itinerary;
 
