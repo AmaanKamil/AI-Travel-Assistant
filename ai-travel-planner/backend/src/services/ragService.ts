@@ -34,8 +34,9 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
         const results = await vectorStore.similaritySearch(query, 3);
 
         if (results.length === 0) {
+            console.log("[RAG Service] No relevant chunks found. Returning strict fallback.");
             return {
-                answer: "I don't have enough reliable information to answer this confidently.",
+                answer: "I don't have enough reliable public information to answer this confidently based on my current knowledge base.",
                 citations: []
             };
         }
@@ -45,7 +46,8 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
         const prompt = `
         You are a helpful travel assistant.
         Answer the user's question based ONLY on the context below. 
-        If the answer is not in the context, say you don't know.
+        If the answer is not in the context, explicitly say "I don't know based on the available information."
+        Do not make up facts.
         
         Context:
         ${context}
@@ -56,6 +58,7 @@ export async function getGroundedAnswer(query: string): Promise<GroundedAnswer> 
         const completion = await groq.chat.completions.create({
             messages: [{ role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
+            temperature: 0 // Strict deterministic
         });
 
         const answer = completion.choices[0]?.message?.content || "I couldn't generate an answer.";

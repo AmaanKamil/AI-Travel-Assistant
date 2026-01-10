@@ -4,8 +4,72 @@ import { EditIntent } from '../types/intent';
 // Helper to identify "Iconic" POIs (Seeds or High Score)
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
 
+// --- VALIDATION HELPER ---
+const isValidPOI = (poi: any): boolean => {
+    if (!poi || !poi.name) return false;
+
+    // 1. Required Fields
+    if (!poi.category || !poi.location || !poi.location.lat || !poi.location.lng) return false;
+
+    // 2. Blocklist
+    const name = poi.name.trim();
+    if (name.toLowerCase() === 'unknown' || name === 'null' || name === '') return false;
+
+    // 3. Latin Characters Only (No Arabic/Chinese/Cyrillic leakage)
+    // Allows accents (e.g. Café) but rejects full non-latin scripts
+    // Regex: Start to end, allowed chars: Latin letters, digits, spaces, standard punctuation.
+    const latinRegex = /^[A-Za-z0-9\s\-\.,&()'!éèàùçâêîôûëïüÿñ]+$/;
+    if (!latinRegex.test(name)) return false;
+
+    return true;
+};
+
+// --- TIMING HELPERS ---
+const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+};
+
+const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
+    if (!prevLoc || !currLoc) return "Travel time varies";
+
+    const dist = haversineDistance(prevLoc.lat, prevLoc.lng, currLoc.lat, currLoc.lng);
+    // Assume average city speed 30km/h
+    const timeInHours = dist / 30;
+    const timeInMins = Math.round(timeInHours * 60);
+
+    if (timeInMins < 5) return "5 mins walk";
+    if (timeInMins < 15) return `${timeInMins} mins taxi`;
+    return `${timeInMins} mins travel`;
+};
+
+const getDuration = (category: string, pace: string): string => {
+    const isRelaxed = pace === 'relaxed';
+    const cat = category.toLowerCase();
+
+    if (cat.includes('museum') || cat.includes('theme park')) return isRelaxed ? '3 hours' : '2.5 hours';
+    if (cat.includes('mall') || cat.includes('souk') || cat.includes('market')) return isRelaxed ? '2.5 hours' : '1.5 hours';
+    if (cat.includes('beach') || cat.includes('park')) return isRelaxed ? '3 hours' : '1 hour';
+    if (cat.includes('restaurant') || cat.includes('cafe')) return isRelaxed ? '2 hours' : '1 hour';
+    if (cat.includes('landmark') || cat.includes('sight')) return '45 mins';
+
+    return '1.5 hours'; // Default
+};
+
+
 export async function buildItinerary(pois: any[], days: number, pace: string = 'medium'): Promise<Itinerary> {
-    console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} POIs. Pace: ${pace}`);
+    console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} RAW POIs. Pace: ${pace}`);
+
+    // FILTER: Apply Strict Validation First
+    const validPOIs = pois.filter(isValidPOI);
+    console.log(`[MCP: Builder] Validated POIs: ${validPOIs.length} / ${pois.length}`);
 
     const plans: DayPlan[] = [];
     const usedPOI_IDs = new Set<string>(); // Global Deduplication Trackers
@@ -33,13 +97,13 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         }
 
         let dayItemCount = 0;
-        let dayHasIconic = false;
+        let lastLocation = null; // For travel time calc
 
-        // Filter POIs for this Day's Zone
-        let zonePOIs = pois.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || (!p.location.zone && targetZone === 'Other')));
+        // Filter POIs for this Day's Zone (Using Validated List)
+        let zonePOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || (!p.location.zone && targetZone === 'Other')));
 
         // If we run out of zone specific items, allow fallback to high score items globally
-        let fallbackPOIs = pois.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
+        let fallbackPOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
 
         for (const slot of slots) {
             if (dayItemCount >= maxItems) break;
@@ -70,13 +134,19 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             }
 
             if (selectedPOI) {
+                const duration = getDuration(selectedPOI.category, pace);
+                const travelTime = slots.indexOf(slot) > 0 ? estimateTravelTime(lastLocation, selectedPOI.location) : "Start";
+
                 dailyBlocks.push({
                     time: slot,
                     activity: `Visit ${selectedPOI.name} (${selectedPOI.location.zone || 'Dubai'})`,
-                    duration: pace === 'relaxed' ? '2-3 hours' : '90 mins'
+                    duration: duration,
+                    description: `Experience ${selectedPOI.category}. Travel: ${travelTime}.`
                 });
+
                 dayItemCount++;
                 usedPOI_IDs.add(selectedPOI.id);
+                lastLocation = selectedPOI.location;
 
                 // Refresh lists
                 zonePOIs = zonePOIs.filter(p => p.id !== selectedPOI.id);
@@ -89,7 +159,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             dailyBlocks.push({
                 time: 'Evening',
                 activity: `Explore Local Area in ${targetZone}`,
-                duration: '1 hour'
+                duration: '1 hour',
+                description: 'Relaxed walking tour.'
             });
         }
 
@@ -106,7 +177,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         plans[0].blocks[0] = {
             time: 'Morning',
             activity: 'Visit Dubai Museum & Al Fahidi Fort (Cultural Mandate)',
-            duration: '2 hours'
+            duration: '2 hours',
+            description: 'Dive into history. Travel: 15 mins taxi.'
         };
     }
 
