@@ -28,15 +28,14 @@ export const orchestrateTrip = async (sessionId: string, transcript: string): Pr
 
 export const editItinerary = async (sessionId: string, editCommand: string): Promise<OrchestrateResponse> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/api/edit-itinerary`, {
+        const response = await axios.post(`${API_BASE_URL}/api/edit`, {
             sessionId,
-            editCommand
+            command: editCommand
         });
         return {
             message: response.data.message,
-            itinerary: response.data.updatedItinerary,
-            audio: response.data.audio,
-            error: response.data.status === 'error' ? response.data.message : undefined
+            itinerary: response.data.itinerary,
+            error: response.data.success === false ? response.data.message : undefined
         } as any;
     } catch (error: any) {
         console.error("Edit API Error:", error);

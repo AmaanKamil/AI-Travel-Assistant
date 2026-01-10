@@ -5,22 +5,20 @@ import { EditIntent } from '../types/intent';
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
 
 // --- VALIDATION HELPER ---
+const sanitizeText = (text: string): string | null => {
+    if (!text) return null;
+    if (/[\u0600-\u06FF]/.test(text)) return null;
+    if (text.toLowerCase().includes('unknown')) return null;
+    return text;
+};
+
+// --- VALIDATION HELPER ---
 const isValidPOI = (poi: any): boolean => {
     if (!poi || !poi.name) return false;
+    if (!sanitizeText(poi.name)) return false;
 
     // 1. Required Fields
     if (!poi.category || !poi.location || !poi.location.lat || !poi.location.lng) return false;
-
-    // 2. Blocklist
-    const name = poi.name.trim();
-    if (name.toLowerCase() === 'unknown' || name === 'null' || name === '') return false;
-
-    // 3. Latin Characters Only (No Arabic/Chinese/Cyrillic leakage)
-    // Allows accents (e.g. Café) but rejects full non-latin scripts
-    // Regex: Start to end, allowed chars: Latin letters, digits, spaces, standard punctuation.
-    const latinRegex = /^[A-Za-z0-9\s\-\.,&()'!éèàùçâêîôûëïüÿñ]+$/;
-    if (!latinRegex.test(name)) return false;
-
     return true;
 };
 
@@ -68,7 +66,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
     console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} RAW POIs. Pace: ${pace}`);
 
     // FILTER: Apply Strict Validation First
-    const validPOIs = pois.filter(isValidPOI);
+    // FILTER: Apply Strict Validation First
+    const validPOIs = pois.filter(p => sanitizeText(p.name) && isValidPOI(p));
     console.log(`[MCP: Builder] Validated POIs: ${validPOIs.length} / ${pois.length}`);
 
     const plans: DayPlan[] = [];
