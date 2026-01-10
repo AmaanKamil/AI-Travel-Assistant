@@ -1,38 +1,60 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
 import { EditIntent } from '../types/intent';
 
-export async function buildItinerary(pois: any[], days: number): Promise<Itinerary> {
-    console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} POIs`);
+export async function buildItinerary(pois: any[], days: number, pace: string = 'medium'): Promise<Itinerary> {
+    console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} POIs. Pace: ${pace}`);
 
     const plans: DayPlan[] = [];
+    const usedPOIs = new Set<string>();
 
-    // Simple round-robin assignment for mock
+    let poiIndex = 0;
+
     for (let i = 1; i <= days; i++) {
         const dailyBlocks: TimeBlock[] = [];
 
-        // Morning
-        const morningPoi = pois[0] || { name: 'Relax at Hotel', estimated_visit_duration_minutes: 120 };
-        dailyBlocks.push({
-            time: 'Morning',
-            activity: `Visit ${morningPoi.name}`,
-            duration: `${morningPoi.estimated_visit_duration_minutes} mins`
-        });
+        // Logic based on pace
+        // Relaxed: 1-2 major activities (Morning/Evening)
+        // Medium: 2-3 activities
+        // Packed: 3-4 activities
 
-        // Afternoon
-        const afternoonPoi = pois[1] || { name: 'Local Market', estimated_visit_duration_minutes: 90 };
-        dailyBlocks.push({
-            time: 'Afternoon',
-            activity: `Explore ${afternoonPoi.name}`,
-            duration: `${afternoonPoi.estimated_visit_duration_minutes} mins`
-        });
+        let slots = ['Morning', 'Afternoon', 'Evening'];
+        if (pace === 'relaxed') {
+            slots = ['Morning', 'Evening']; // Skip afternoon heat or just less stuff
+        } else if (pace === 'packed') {
+            slots = ['Morning', 'Lunch', 'Afternoon', 'Evening'];
+        }
 
-        // Evening
-        const eveningPoi = pois[2] || { name: 'City Walk', estimated_visit_duration_minutes: 120 };
-        dailyBlocks.push({
-            time: 'Evening',
-            activity: `Dinner at ${eveningPoi.name}`,
-            duration: '90 mins'
-        });
+        for (const slot of slots) {
+            if (poiIndex >= pois.length) break;
+
+            let poi = pois[poiIndex];
+
+            // Deduplication Check (though simple linear scan avoids it mostly, but good for safety)
+            if (usedPOIs.has(poi.name)) {
+                poiIndex++;
+                if (poiIndex < pois.length) poi = pois[poiIndex];
+                else break;
+            }
+
+            // Assign POI
+            dailyBlocks.push({
+                time: slot,
+                activity: `Visit ${poi.name}`,
+                duration: `${poi.estimated_visit_duration_minutes} mins`
+            });
+
+            usedPOIs.add(poi.name);
+            poiIndex++;
+        }
+
+        // Fallback if no POIs left
+        if (dailyBlocks.length === 0) {
+            dailyBlocks.push({
+                time: 'Morning',
+                activity: 'Free time to explore or relax at the hotel',
+                duration: '120 mins'
+            });
+        }
 
         plans.push({
             day: i,
@@ -41,7 +63,7 @@ export async function buildItinerary(pois: any[], days: number): Promise<Itinera
     }
 
     return {
-        title: `Your ${days}-Day Dubai Adventure`,
+        title: `Your ${days}-Day Dubai Adventure (${pace} pace)`,
         days: plans
     };
 }

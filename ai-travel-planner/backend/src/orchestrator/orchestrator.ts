@@ -16,10 +16,10 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             context = createNewSession(sessionId);
         }
 
-        // Auto-transition IDLE -> PARSING for text API
-        if (context.currentState === 'IDLE') {
-            context.currentState = 'PARSING';
-        }
+        // ALWAYS Start by parsing the new input, regardless of previous state
+        // The previous state helps context.lastState if we wanted to track history, 
+        // but for the orchestrator loop, we need to enter the PARSING block.
+        context.currentState = 'PARSING';
 
         console.log(`[Orchestrator] Session: ${sessionId} | Input: "${transcript}" | State: ${context.currentState}`);
 
@@ -53,7 +53,10 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
             // Logic check: Do we need clarification?
             const hasDays = !!context.collectedConstraints.days;
-            if (intent.type === 'plan_trip' && !hasDays && context.clarificationCount < 2) {
+            // Strict clarification rules: 
+            // 1. Must have days
+            // 2. Max 6 questions
+            if (intent.type === 'plan_trip' && !hasDays && context.clarificationCount < 6) {
                 context.currentState = 'CLARIFYING';
                 logTransition('PARSING', 'CLARIFYING');
             } else {
@@ -62,11 +65,26 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             }
         }
 
+
         // --- STATE HANDLER: CLARIFYING ---
         if (context.currentState === 'CLARIFYING') {
-            responseMessage = "How many days are you planning to visit Dubai?";
+            const missing = !context.collectedConstraints.days ? 'days' : null;
+            if (missing === 'days') {
+                responseMessage = "How many days are you planning to visit Dubai?";
+            } else {
+                // Fallback if we ended up here but have days (shouldn't happen with current logic, but safe)
+                responseMessage = "Is there anything else specific you'd like to include?";
+            }
             context.clarificationCount++;
             saveSession(context);
+
+            // IMPORTANT: Stay in CLARIFYING state if we just asked a question? 
+            // Actually, we return the question, and the NEXT user input goes to PARSING -> checks constraints again.
+            // But we need to make sure the NEXT input is treated as an answer.
+            // Our Parse intent logic handles general text. 
+            // The state machine needs to handle CLARIFYING -> PARSING on next turn.
+            // In handleUserInput, we effectively "pause" here and wait for next turn.
+
             return {
                 message: responseMessage,
                 currentState: context.currentState,
@@ -81,6 +99,11 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             if (context.collectedConstraints.days) {
                 logTransition('CONFIRMING', 'PLANNING');
                 context.currentState = 'PLANNING';
+                // Recursive call to proceed immediately to planning in the SAME turn
+                // But simplified: just let the loop continue or fall through? 
+                // We're using if-blocks, so if we change state to PLANNING, the next if-block will pick it up!
+                // EXCEPT: we need to make sure we don't return early. 
+                // Currently code structure is sequential ifs.
             } else {
                 saveSession(context);
                 return {
@@ -107,7 +130,8 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             }
 
             // 2. Build Itinerary
-            const itinerary = await buildItinerary(pois, days);
+            const pace = context.collectedConstraints.pace || 'medium';
+            const itinerary = await buildItinerary(pois, days, pace);
             context.itinerary = itinerary;
             debugLog.push(`Itinerary Built`);
 
@@ -139,7 +163,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 if (editReport.passed) {
                     context.itinerary = updatedItinerary;
                     context.lastEvaluation = { ...editReport, passed: true } as any;
-                    responseMessage = `I've updated Day ${context.lastEditIntent.target_day} for you.`;
+                    responseMessage = `I've updated Day ${context.lastEditIntent.target_day} for you. ${updatedItinerary.days[context.lastEditIntent.target_day - 1].blocks.length} activities are planned.`;
 
                     logTransition('EDITING', 'PRESENTING');
                     context.currentState = 'PRESENTING';

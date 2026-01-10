@@ -126,8 +126,28 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     }, [isListening]);
 
 
+    // TTS Effect
+    useEffect(() => {
+        if (!responseMessage) return;
+
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(responseMessage);
+        utterance.lang = "en-US";
+        utterance.rate = 1.0;
+
+        // Mobile safari needs explicit interaction, but valid for most desktop checks
+        window.speechSynthesis.speak(utterance);
+
+        return () => {
+            window.speechSynthesis.cancel();
+        };
+    }, [responseMessage]);
+
     const startListening = () => {
         setResponseMessage("");
+        window.speechSynthesis.cancel(); // Stop speaking when listening starts
         // setDisplayItinerary(null); // Keep previous itinerary visible for editing context
         setEvaluations(null);
         setCitations([]);
