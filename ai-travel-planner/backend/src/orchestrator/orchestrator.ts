@@ -23,6 +23,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
         // 1. Parse Intent (Always understand what user said)
         const intent = await extractIntent(transcript);
+        let debugLog: string[] = [`Parsed Intent: ${intent.type}`];
 
         // Merge Entities
         if (intent.entities) {
@@ -33,7 +34,6 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         }
 
         let responseMessage = "";
-        let debugLog: string[] = [`Parsed Intent: ${intent.type}`];
         let nextState: OrchestratorState = context.currentState as OrchestratorState;
 
         // 2. Finite State Machine Logic
@@ -41,16 +41,23 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             case 'IDLE':
             case 'READY': // Start new flow from READY
                 if (intent.type === 'plan_trip') {
-                    // Check missing info
-                    if (!context.collectedConstraints.days) {
-                        nextState = 'COLLECTING_INFO';
+                    // Start collection check immediately
+                    nextState = 'COLLECTING_INFO';
+                    logTransition(debugLog, context.currentState, nextState);
+                } else if (intent.type === 'edit_itinerary') {
+                    if (context.currentState === 'READY' && context.itinerary) {
+                        nextState = 'EDITING';
+                        logTransition(debugLog, context.currentState, nextState);
                     } else {
-                        nextState = 'CONFIRMING';
+                        responseMessage = "Let's finish planning your trip first before we edit it.";
                     }
-                } else if (intent.type === 'edit_itinerary' && context.itinerary) {
-                    nextState = 'EDITING';
-                } else if (intent.type === 'export' && context.itinerary) {
-                    nextState = 'EXPORTING';
+                } else if (intent.type === 'export') {
+                    if (context.currentState === 'READY' && context.itinerary) {
+                        nextState = 'EXPORTING';
+                        logTransition(debugLog, context.currentState, nextState);
+                    } else {
+                        responseMessage = "I need a plan before I can email it to you.";
+                    }
                 } else if (intent.type === 'ask_question') {
                     // One-off question, stay in READY/IDLE
                     const answer = await getGroundedAnswer(transcript);
@@ -149,11 +156,14 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             const pace = context.collectedConstraints.pace || 'medium';
             const interests = context.collectedConstraints.interests?.join(", ") || "general sightseeing";
 
-            responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai at a ${pace} pace, focusing on ${interests}. Shall I generate the plan?`;
+            if (!responseMessage) {
+                responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai at a ${pace} pace, focusing on ${interests}. Shall I generate the plan?`;
+            }
         }
 
         if (context.currentState === 'PLANNING') {
             const days = context.collectedConstraints.days || 3;
+            // Only search if we have interests, else default
             const pois = await searchPOIs(context.collectedConstraints.interests || []);
             const pace = context.collectedConstraints.pace || 'medium';
             const itinerary = await buildItinerary(pois, days, pace);

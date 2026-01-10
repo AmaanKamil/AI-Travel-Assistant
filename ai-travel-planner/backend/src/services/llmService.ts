@@ -63,7 +63,6 @@ export async function extractIntent(text: string): Promise<Intent> {
             3. "3 days" -> plan_trip { days: 3 }.
             4. "Relaxed" -> plan_trip { pace: "relaxed" }.
             5. "I like history and souks" -> plan_trip { interests: ["history", "souks"] }.
-            6. "Email this", "Send it", "Export" -> export.
             
             Entities: 
             - days (number)
