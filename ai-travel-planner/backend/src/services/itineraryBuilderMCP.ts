@@ -130,12 +130,18 @@ export async function buildItineraryEdit(original: Itinerary, intent: EditIntent
     const dayPlan = updated.days[dayIndex];
 
     // Apply dummy logic based on change type
+    // Apply logic based on change type
     if (intent.change_type === 'make_more_relaxed') {
-        // Remove one activity and increase duration of others
+        // STRICT LOGIC: Remove one activity (the last one usually) and add a "Relaxation" block
         if (dayPlan.blocks.length > 1) {
-            dayPlan.blocks.pop(); // Remove evening or last block
-            dayPlan.blocks[0].activity += " (Relaxed Pace)";
-            dayPlan.blocks[0].duration = "4 hours";
+            const removed = dayPlan.blocks.pop(); // Remove last activity
+            console.log(`[MCP: Builder] Removed activity: ${removed?.activity} to relax schedule.`);
+
+            dayPlan.blocks.push({
+                time: 'Late Afternoon',
+                activity: 'Free Time & Relaxation',
+                duration: '2 hours'
+            });
         }
     }
     else if (intent.change_type === 'swap_activity') {

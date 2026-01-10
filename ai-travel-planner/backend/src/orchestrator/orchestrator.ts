@@ -64,6 +64,7 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 if (context.clarificationCount > 6) {
                     if (!context.collectedConstraints.days) context.collectedConstraints.days = 3;
                     if (!context.collectedConstraints.pace) context.collectedConstraints.pace = 'medium';
+                    if (!context.collectedConstraints.interests) context.collectedConstraints.interests = ['sightseeing'];
                     nextState = 'CONFIRMING';
                     logTransition(debugLog, 'COLLECTING_INFO', 'CONFIRMING (Forced)');
                     break;
@@ -72,20 +73,21 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 // SEQUENCE: Days -> Pace -> Interests
                 if (!context.collectedConstraints.days) {
                     nextState = 'COLLECTING_INFO';
-                    // Will generate question for days below
+                    logTransition(debugLog, 'CHECK', 'COLLECTING_INFO (Missing Days)');
                 } else if (!context.collectedConstraints.pace) {
                     nextState = 'COLLECTING_INFO';
-                    // Will generate question for pace below
+                    logTransition(debugLog, 'CHECK', 'COLLECTING_INFO (Missing Pace)');
+                } else if (!context.collectedConstraints.interests || context.collectedConstraints.interests.length === 0) {
+                    nextState = 'COLLECTING_INFO';
+                    logTransition(debugLog, 'CHECK', 'COLLECTING_INFO (Missing Interests)');
                 } else {
                     nextState = 'CONFIRMING';
+                    logTransition(debugLog, 'CHECK', 'CONFIRMING (All Fields Present)');
                 }
                 break;
 
             case 'CONFIRMING':
                 // STRICT RULE: Only transition to PLANNING if user says "YES"
-                // If user updates constraints (e.g., "actually 4 days"), we stay in CONFIRMING or go back to COLLECTING
-
-                // We check if the intent was 'plan_trip' (which might be "yes") or simple agreement
                 const isAffirmative = /yes|sure|ok|correct|go ahead|please|build/i.test(transcript);
 
                 // If user provided new constraints, allow update (orchestrator already merged them at top)
@@ -94,12 +96,14 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 if (changedConstraints) {
                     // Stay in CONFIRMING to re-read new constraints
                     nextState = 'CONFIRMING';
-                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Update)');
+                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Update Received)');
                 } else if (isAffirmative) {
                     nextState = 'PLANNING';
+                    logTransition(debugLog, 'CONFIRMING', 'PLANNING (User Confirmed)');
                 } else {
                     // Ambiguous response? Ask again.
                     nextState = 'CONFIRMING';
+                    logTransition(debugLog, 'CONFIRMING', 'CONFIRMING (Waiting for Yes)');
                 }
                 break;
 
@@ -108,6 +112,10 @@ export async function handleUserInput(sessionId: string, transcript: string) {
                 break;
 
             case 'PLANNING':
+                nextState = 'READY';
+                break;
+
+            case 'EXPORTING':
                 nextState = 'READY';
                 break;
 
@@ -128,10 +136,10 @@ export async function handleUserInput(sessionId: string, transcript: string) {
             if (!context.collectedConstraints.days) {
                 responseMessage = "To plan the best trip, I first need to know: How many days are you visiting?";
             } else if (!context.collectedConstraints.pace) {
-                // Explicitly ask for pace if missing
                 responseMessage = "Got it. And what pace do you prefer? (Relaxed, Medium, or Packed?)";
+            } else if (!context.collectedConstraints.interests || context.collectedConstraints.interests.length === 0) {
+                responseMessage = "Great. Finally, what kind of experiences do you enjoy? (e.g., Art, History, Shopping, Beach)";
             } else {
-                // Should have transitioned, but safe fallback
                 responseMessage = "I have everything I need. Ready to build?";
             }
             context.clarificationCount++;
@@ -139,19 +147,13 @@ export async function handleUserInput(sessionId: string, transcript: string) {
 
         if (context.currentState === 'CONFIRMING') {
             const pace = context.collectedConstraints.pace || 'medium';
-            responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai at a ${pace} pace. Shall I generate the plan?`;
-            // Crucial: The NEXT user input needs to trigger PLANNING.
-            // Current Transition Logic: IDLE -> CONFIRMING.
-            // If we stop here, we wait for "Yes".
-            // If user says "Yes", next turn state is CONFIRMING.
-            // Switch(CONFIRMING) -> matches -> transition to PLANNING.
-            // Correct.
+            const interests = context.collectedConstraints.interests?.join(", ") || "general sightseeing";
+
+            responseMessage = `I understand you want a ${context.collectedConstraints.days}-day trip to Dubai at a ${pace} pace, focusing on ${interests}. Shall I generate the plan?`;
         }
 
         if (context.currentState === 'PLANNING') {
             const days = context.collectedConstraints.days || 3;
-            // responseMessage is built at end
-
             const pois = await searchPOIs(context.collectedConstraints.interests || []);
             const pace = context.collectedConstraints.pace || 'medium';
             const itinerary = await buildItinerary(pois, days, pace);
@@ -180,14 +182,9 @@ export async function handleUserInput(sessionId: string, transcript: string) {
         }
 
         if (context.currentState === 'EXPORTING') {
-            // Let the route handle the actual email trigger via /export-itinerary usually?
-            // Or if voice triggered:
-            responseMessage = "I can email that to you. Just say 'send it'.";
-            // Actually, user usually enters email in UI. 
-            // If voice command "email this", we might not have the email.
+            responseMessage = "I can email that to you. Just say 'send it' or enter your email in the box.";
             context.currentState = 'READY';
         }
-
 
         saveSession(context);
 

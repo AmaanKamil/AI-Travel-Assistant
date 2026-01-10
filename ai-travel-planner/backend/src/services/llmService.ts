@@ -59,11 +59,17 @@ export async function extractIntent(text: string): Promise<Intent> {
             
             Rules:
             1. If user wants to "change", "swap", "make more relaxed", "make packed", or mentions a specific "Day X", classify as "edit_itinerary".
-            2. If user provides "days", "pace", or "interests" for a NEW trip, classify as "plan_trip".
+            2. If user provides "days", "pace", or "interests" (experiences like art, food, history) for a NEW trip, classify as "plan_trip".
             3. "3 days" -> plan_trip { days: 3 }.
             4. "Relaxed" -> plan_trip { pace: "relaxed" }.
+            5. "I like history and souks" -> plan_trip { interests: ["history", "souks"] }.
+            6. "Email this", "Send it", "Export" -> export.
             
-            Entities: days (number), pace (relaxed, medium, packed), interests (string[]).
+            Entities: 
+            - days (number)
+            - pace (relaxed, medium, packed)
+            - interests (string[] - extract key themes e.g. "beach", "shopping", "culture")
+
             If intent is "edit_itinerary", extract change_type (make_more_relaxed, swap_activity, add_place) and target_day (number).
             `;
 
