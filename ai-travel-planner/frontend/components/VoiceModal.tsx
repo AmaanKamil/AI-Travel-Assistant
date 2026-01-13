@@ -1,19 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Mic, X, Loader2, MessageSquare, Mail } from "lucide-react";
+import { Mic, X, Loader2, MessageSquare, Mail, RefreshCw, Check } from "lucide-react";
 import TranscriptBox from "./TranscriptBox";
 import { orchestrateTrip, exportItinerary, editItinerary } from "@/lib/api";
 import ItineraryView from "./ItineraryView";
 import SourcesPanel from "./SourcesPanel";
 import PlanningChecks from "./PlanningChecks";
 
-declare global {
-    interface Window {
-        SpeechRecognition: any;
-        webkitSpeechRecognition: any;
-    }
-}
+// Removed Window interface for SpeechRecognition as we use MediaRecorder now
 
 interface VoiceModalProps {
     onClose: () => void;
@@ -23,6 +18,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [transcript, setTranscript] = useState("");
+    const [pendingTranscript, setPendingTranscript] = useState(""); // New state for confirmation
     const [responseMessage, setResponseMessage] = useState("");
     const [displayItinerary, setDisplayItinerary] = useState<any>(null);
     const [evaluations, setEvaluations] = useState<any>(null);
@@ -32,7 +28,8 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [email, setEmail] = useState("");
     const [isExporting, setIsExporting] = useState(false);
 
-    const recognitionRef = useRef<any>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
 
     const handleExport = async () => {
         if (!email || !displayItinerary) return;
@@ -98,50 +95,80 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         setIsProcessing(false);
     };
 
-    useEffect(() => {
-        // Initialize Speech Recognition
-        if (typeof window !== "undefined") {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRecognition) {
-                const recognition = new SpeechRecognition();
-                recognition.continuous = false; // Stop after one sentence/fragment
-                recognition.interimResults = true;
-                recognition.lang = "en-US";
+    const processAudio = async (blob: Blob) => {
+        setIsProcessing(true);
+        try {
+            const formData = new FormData();
+            formData.append('audio', blob, 'speech.webm');
 
-                recognition.onstart = () => {
-                    setIsListening(true);
-                    setTranscript("");
-                };
+            const res = await fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            });
 
-                recognition.onresult = (event: any) => {
-                    let currentTranscript = "";
-                    for (let i = 0; i < event.results.length; i++) {
-                        currentTranscript += event.results[i][0].transcript;
-                    }
-                    setTranscript(currentTranscript);
-                };
-
-                recognition.onerror = (event: any) => {
-                    console.error("Speech recognition error", event.error);
-                    setIsListening(false);
-                };
-
-                recognition.onend = () => {
-                    setIsListening(false);
-                };
-
-                recognitionRef.current = recognition;
+            const data = await res.json();
+            if (data.text) {
+                setPendingTranscript(data.text);
             }
+        } catch (error) {
+            console.error("Transcription failed", error);
+            setResponseMessage("Sorry, I couldn't hear that properly.");
+        } finally {
+            setIsProcessing(false);
         }
-    }, []);
+    };
 
-    // Effect to trigger logic when listening stops naturally
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        if (!isListening && transcript.trim().length > 0 && !responseMessage) {
-            handleSubmit(transcript);
+    const startListening = async () => {
+        setResponseMessage("");
+        setPendingTranscript("");
+        setTranscript("");
+        window.speechSynthesis.cancel();
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            chunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunksRef.current.push(e.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+                processAudio(blob);
+
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            setIsListening(true);
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            alert("Could not access microphone.");
         }
-    }, [isListening]);
+    };
+
+    const stopListening = () => {
+        if (mediaRecorderRef.current && isListening) {
+            mediaRecorderRef.current.stop();
+            setIsListening(false);
+        }
+    };
+
+    const confirmTranscript = () => {
+        if (pendingTranscript) {
+            setTranscript(pendingTranscript);
+            handleSubmit(pendingTranscript);
+            setPendingTranscript("");
+        }
+    };
+
+    const retryListening = () => {
+        setPendingTranscript("");
+        startListening();
+    };
 
 
     // TTS Playback Ref
@@ -172,29 +199,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         }
     };
 
-    const startListening = () => {
-        setResponseMessage("");
-        window.speechSynthesis.cancel(); // Stop speaking when listening starts
-        // setDisplayItinerary(null); // Keep previous itinerary visible for editing context
-        setEvaluations(null);
-        setCitations([]);
-        setTranscript("");
-        if (recognitionRef.current) {
-            try {
-                recognitionRef.current.start();
-            } catch (e) {
-                console.error("Start error:", e);
-            }
-        } else {
-            alert("Speech recognition not supported in this browser.");
-        }
-    };
-
-    const stopListening = () => {
-        if (recognitionRef.current) {
-            recognitionRef.current.stop();
-        }
-    };
+    // Removed old startListening/stopListening as they are redefined above
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-500">
@@ -217,12 +222,33 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                     {/* Transcript / Chat Area */}
                     <div className="space-y-6">
                         {/* User Transcript */}
-                        {(transcript || isListening) && (
-                            <TranscriptBox
-                                transcript={transcript}
-                                isUser={true}
-                                status={isListening ? "Listening..." : (isProcessing ? "Processing..." : "")}
-                            />
+                        {(transcript || pendingTranscript) && (
+                            <div className="space-y-4">
+                                <TranscriptBox
+                                    transcript={pendingTranscript || transcript}
+                                    isUser={true}
+                                    status={isListening ? "Listening..." : (isProcessing ? "Processing..." : "")}
+                                />
+
+                                {pendingTranscript && (
+                                    <div className="flex items-center gap-4 justify-end animate-in fade-in slide-in-from-top-2">
+                                        <button
+                                            onClick={retryListening}
+                                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 transition-all text-sm font-medium border border-white/10"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Retry
+                                        </button>
+                                        <button
+                                            onClick={confirmTranscript}
+                                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-all text-sm font-medium border border-green-500/20"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                            Confirm
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         {/* Assistant Response */}

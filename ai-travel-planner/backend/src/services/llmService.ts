@@ -20,6 +20,10 @@ export async function extractIntent(text: string): Promise<Intent> {
         return match ? parseInt(match[1]) : null;
     };
 
+    if (/^(yes|yeah|yep|sure|go ahead|generate|okay|ok)$/i.test(text.trim())) {
+        return { type: 'confirm_yes', entities: {} };
+    }
+
     const performFallback = (input: string): Intent => {
         console.log(`[LLM Service] Using Fallback Logic for: "${input}"`);
         const lower = input.toLowerCase();

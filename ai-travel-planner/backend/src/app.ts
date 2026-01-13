@@ -22,9 +22,11 @@ app.get('/health', (req, res) => {
 });
 
 import editRouter from './routes/edit';
+import transcribeRouter from './routes/transcribe';
 
 // Mount routes
 app.use('/api', orchestratorRoutes);
 app.use('/api/edit', editRouter);
+app.use('/api/transcribe', transcribeRouter);
 
 export default app;

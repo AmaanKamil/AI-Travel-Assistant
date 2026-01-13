@@ -125,54 +125,30 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     if (ctx.currentState === 'CONFIRMING') {
-        // Check confirmation intent. "intent.confirmed" is not standard in my LLM service. My previous orchestrator used regex.
-        // I will use regex here to match "intent.confirmed" logic unless I update LLM service.
-        // The user code assumes `intent.confirmed` exists. I should probably add it to the intent extractor or emulate it.
-        // I'll emulate it with regex for now to be "product correct" without changing LLM service too much.
-        const isAffirmative = /yes|sure|ok|correct|go ahead|please|build/i.test(userInput);
-        const confirmed = isAffirmative; // Emulating intent.confirmed
-
-        if (!confirmed) {
-            // Logic from user: "If !intent.confirmed ... return message: No problem..."
-            // But wait, if user provides *new constraints* (e.g. "Actually make it 4 days"), we should update and re-confirm?
-            // User code: "ctx.currentState = 'COLLECTING_INFO'; return message: 'No problem. Let’s update your preferences.'"
-            // This implies if they say "No", it goes back. That's fine.
-
-            // Adaptation: Check if they are just answering "No".
-            if (/no|cancel|wait|change/i.test(userInput)) {
-                ctx.currentState = 'COLLECTING_INFO';
-                saveSession(ctx);
-                return {
-                    message: 'No problem. Let’s update your preferences.',
-                    currentState: 'COLLECTING_INFO',
-                };
-            }
-            // If it's ambiguous, stay in confirming? User code strictly handles `!confirmed`. 
-            // I will assume if NOT "Yes", then it's a "No/Update" in this strict logic?
-            // The user said "If state_after is not READY the system is broken" in Part 4 of PREVIOUS prompt.
-            // Here "if !confirmed -> COLLECTING_INFO".
-        } else {
-            ctx.currentState = 'PLANNING';
+        if (intent.type !== 'confirm_yes') {
+            ctx.currentState = 'COLLECTING_INFO';
             saveSession(ctx);
-
-            // searchPOIs signature adaptation
-            const pois = await searchPOIs(ctx.collectedConstraints.interests || [], []); // pass interests
-
-            // buildItinerary signature adaptation
-            const itinerary = await buildItinerary(pois, parseInt(String(ctx.collectedConstraints.days)), ctx.collectedConstraints.pace);
-
-            ctx.itinerary = itinerary;
-            ctx.currentState = 'READY';
-            saveSession(ctx);
-
-            console.log("state_transition: PLANNING -> READY");
-
             return {
-                message: 'Here’s your itinerary.',
-                itinerary,
-                currentState: 'READY',
+                message: 'Okay, let’s update your preferences.',
+                currentState: 'COLLECTING_INFO'
             };
         }
+
+        ctx.currentState = 'PLANNING';
+        saveSession(ctx);
+
+        const pois = await searchPOIs(ctx.collectedConstraints.interests || [], []);
+        const itinerary = await buildItinerary(pois, parseInt(String(ctx.collectedConstraints.days)), ctx.collectedConstraints.pace);
+
+        ctx.itinerary = itinerary;
+        ctx.currentState = 'READY';
+        saveSession(ctx);
+
+        return {
+            message: 'Here’s your itinerary.',
+            itinerary,
+            currentState: 'READY'
+        };
     }
 
     // -------------------
