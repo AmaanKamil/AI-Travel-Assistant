@@ -33,7 +33,16 @@ async function startRecording(
         setListening(false);
 
         try {
-            const res = await fetch('/api/transcribe', {
+            if (!process.env.NEXT_PUBLIC_API_URL) {
+                console.error('NEXT_PUBLIC_API_URL is not defined');
+                alert('App misconfiguration. Please contact support.');
+                return;
+            }
+
+            const endpoint = `${process.env.NEXT_PUBLIC_API_URL}/api/transcribe`;
+            console.log('🎙️ Sending audio to:', endpoint);
+
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 body: formData
             });
