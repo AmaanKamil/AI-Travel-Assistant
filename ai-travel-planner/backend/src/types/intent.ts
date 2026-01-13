@@ -1,5 +1,5 @@
 export interface Intent {
-    type: 'plan_trip' | 'edit_itinerary' | 'ask_question' | 'export' | 'confirm_yes';
+    type: 'plan_trip' | 'edit_itinerary' | 'ask_question' | 'export' | 'CONFIRM_GENERATE';
     entities?: {
         days?: number;
         pace?: string;

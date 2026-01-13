@@ -125,29 +125,33 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     if (ctx.currentState === 'CONFIRMING') {
-        if (intent.type !== 'confirm_yes') {
-            ctx.currentState = 'COLLECTING_INFO';
+        if (intent.type === 'CONFIRM_GENERATE') {
+            console.log('✅ Confirmation received. Forcing plan generation.');
+
+            ctx.currentState = 'PLANNING';
             saveSession(ctx);
+
+            const pois = await searchPOIs('Dubai', ctx.collectedConstraints);
+            const itinerary = await buildItinerary(pois, ctx.collectedConstraints);
+
+            ctx.itinerary = itinerary;
+            ctx.currentState = 'READY';
+            saveSession(ctx);
+
             return {
-                message: 'Okay, let’s update your preferences.',
-                currentState: 'COLLECTING_INFO'
+                message: 'Here is your itinerary.',
+                itinerary,
+                currentState: 'READY'
             };
         }
 
-        ctx.currentState = 'PLANNING';
-        saveSession(ctx);
-
-        const pois = await searchPOIs(ctx.collectedConstraints.interests || [], []);
-        const itinerary = await buildItinerary(pois, parseInt(String(ctx.collectedConstraints.days)), ctx.collectedConstraints.pace);
-
-        ctx.itinerary = itinerary;
-        ctx.currentState = 'READY';
+        // if user did NOT confirm, go back to collecting
+        ctx.currentState = 'COLLECTING_INFO';
         saveSession(ctx);
 
         return {
-            message: 'Here’s your itinerary.',
-            itinerary,
-            currentState: 'READY'
+            message: 'No problem, let’s update your preferences.',
+            currentState: 'COLLECTING_INFO'
         };
     }
 
@@ -171,6 +175,14 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             currentState: ctx.currentState
         };
     }
+
+    saveSession(ctx);
+    console.log(
+        'STATE:',
+        ctx.currentState,
+        'INTENT:',
+        intent.type
+    );
 
     // Fallback
     return {

@@ -14,15 +14,30 @@ export async function extractIntent(text: string): Promise<Intent> {
     console.log(`[LLM Service] Parsing: "${text}"`);
     if (!text || text.trim().length === 0) return { type: 'plan_trip', entities: {} };
 
-    // Regex / Heuristic Override (Run this anyway to be safe)
+    const normalized = text.trim().toLowerCase();
+
+    if (
+        normalized === 'yes' ||
+        normalized === 'yeah' ||
+        normalized === 'yep' ||
+        normalized === 'sure' ||
+        normalized === 'ok' ||
+        normalized === 'okay' ||
+        normalized === 'go ahead' ||
+        normalized === 'generate' ||
+        normalized === 'please do'
+    ) {
+        return { type: 'CONFIRM_GENERATE' };
+    }
+
+    if (/^(yes|yeah|yep|sure|go ahead|generate|okay|ok)$/i.test(text.trim())) {
+        return { type: 'CONFIRM_GENERATE', entities: {} };
+    }
+
     const extractDaysRegex = (input: string) => {
         const match = input.match(/(\d+)\s*days?/i) || input.match(/^(\d+)$/);
         return match ? parseInt(match[1]) : null;
     };
-
-    if (/^(yes|yeah|yep|sure|go ahead|generate|okay|ok)$/i.test(text.trim())) {
-        return { type: 'confirm_yes', entities: {} };
-    }
 
     const performFallback = (input: string): Intent => {
         console.log(`[LLM Service] Using Fallback Logic for: "${input}"`);
