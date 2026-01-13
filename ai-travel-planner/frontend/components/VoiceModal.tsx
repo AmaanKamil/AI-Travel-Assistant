@@ -138,6 +138,16 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         };
     }, []);
 
+    // SYSTEM BOOT (First Load)
+    useEffect(() => {
+        const initSystem = async () => {
+            console.log("Triggering SYSTEM_BOOT...");
+            // Simulate "speech" to trigger orchestrator boot intent
+            await handleSubmit("SYSTEM_BOOT");
+        };
+        initSystem();
+    }, []);
+
     const playAudio = (base64Audio: string) => {
         if (audioRef.current) {
             audioRef.current.pause();

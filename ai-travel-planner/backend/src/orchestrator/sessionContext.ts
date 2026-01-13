@@ -11,10 +11,14 @@ export interface SessionContext {
         interests?: string[];
         constraints?: string[];
     };
-    clarificationCount: number;
-    itinerary?: Itinerary;
-    lastEvaluation?: EvaluationReport;
-    lastEditIntent?: any; // Using any or importing EditIntent to avoid circular deps if complex
+    constraints?: string[];
+};
+constraintsCollected: boolean;
+planGenerated: boolean;
+clarificationCount: number;
+itinerary ?: Itinerary;
+lastEvaluation ?: EvaluationReport;
+lastEditIntent ?: any; // Using any or importing EditIntent to avoid circular deps if complex
 }
 
 const sessions = new Map<string, SessionContext>();
@@ -32,6 +36,10 @@ export function createNewSession(sessionId: string): SessionContext {
         sessionId,
         currentState: 'IDLE',
         collectedConstraints: {},
+        currentState: 'IDLE',
+        collectedConstraints: {},
+        constraintsCollected: false,
+        planGenerated: false,
         clarificationCount: 0
     };
     sessions.set(sessionId, newContext);

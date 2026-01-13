@@ -35,6 +35,19 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     console.log(`[Orchestrator] Session: ${sessionId} | State: ${ctx.currentState} | Intent: ${intent.type}`);
 
     // -------------------
+    // SYSTEM BOOT (First Load)
+    // -------------------
+    if (intent.type === 'SYSTEM_BOOT') {
+        ctx.currentState = 'COLLECTING_INFO';
+        saveSession(ctx);
+
+        return {
+            message: 'Hi, I’m your Dubai travel assistant. Tell me about your trip.',
+            currentState: 'COLLECTING_INFO'
+        };
+    }
+
+    // -------------------
     // EDIT FLOW
     // -------------------
     if (intent.type === 'edit_itinerary') { // Mapped 'edit' to 'edit_itinerary' to match existing intent types if needed, or 'edit' if strict. User said 'edit', but existing intent output 'edit_itinerary'. I will assume 'edit_itinerary' is the correct type from LLM extractor, or I should update LLM extractor. User said "intent.type === 'edit'". I will check LLM service. Existing orchestrator used 'edit_itinerary'. I will use 'edit_itinerary' here to be safe or map it. Actually, I should update the *extractIntent* to return 'edit' if I want to match code exactly. But I'll assume adaptation is allowed for types. I'll check 'edit' OR 'edit_itinerary'.
@@ -105,28 +118,48 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     if (ctx.currentState === 'COLLECTING_INFO') {
-        const missing = getMissingField(ctx);
-        if (missing) {
+        // Prevent re-entry if already done, unless explicit change requested
+        if (ctx.constraintsCollected && intent.type !== 'CHANGE_PREFERENCES') {
+            ctx.currentState = 'CONFIRMING';
+            // Fall through to confirming logic below
+        } else {
+            const missing = getMissingField(ctx);
+            if (missing) {
+                return {
+                    message: nextClarifyingQuestion(missing),
+                    currentState: 'COLLECTING_INFO',
+                };
+            }
+
+            // All fields collected
+            ctx.constraintsCollected = true;
+            ctx.currentState = 'CONFIRMING';
+            saveSession(ctx);
+
             return {
-                message: nextClarifyingQuestion(missing),
-                currentState: 'COLLECTING_INFO',
+                message: `I understand you want a ${ctx.collectedConstraints.days}-day trip to Dubai, focused on ${ctx.collectedConstraints.interests?.join(
+                    ', '
+                )}, at a ${ctx.collectedConstraints.pace} pace. Should I generate the plan?`,
+                currentState: 'CONFIRMING',
             };
         }
-
-        ctx.currentState = 'CONFIRMING';
-        saveSession(ctx);
-
-        return {
-            message: `I understand you want a ${ctx.collectedConstraints.days}-day trip to Dubai, focused on ${ctx.collectedConstraints.interests?.join(
-                ', '
-            )}, at a ${ctx.collectedConstraints.pace} pace. Should I generate the plan?`,
-            currentState: 'CONFIRMING',
-        };
     }
 
     if (ctx.currentState === 'CONFIRMING') {
+        // If plan already generated, never ask again
+        if (ctx.planGenerated) {
+            ctx.currentState = 'READY';
+            saveSession(ctx);
+
+            return {
+                message: 'Your itinerary is ready. You can edit it or ask questions.',
+                itinerary: ctx.itinerary,
+                currentState: 'READY'
+            };
+        }
+
         if (intent.type === 'CONFIRM_GENERATE') {
-            console.log('✅ Confirmation received. Forcing plan generation.');
+            console.log('✅ User confirmed. Generating plan.');
 
             ctx.currentState = 'PLANNING';
             saveSession(ctx);
@@ -139,6 +172,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             );
 
             ctx.itinerary = itinerary;
+            ctx.planGenerated = true;
             ctx.currentState = 'READY';
             saveSession(ctx);
 
@@ -149,13 +183,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             };
         }
 
-        // if user did NOT confirm, go back to collecting
-        ctx.currentState = 'COLLECTING_INFO';
-        saveSession(ctx);
-
         return {
-            message: 'No problem, let’s update your preferences.',
-            currentState: 'COLLECTING_INFO'
+            message: 'Tell me if you’d like me to generate the plan, or change something.',
+            currentState: 'CONFIRMING'
         };
     }
 
@@ -181,11 +211,12 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     saveSession(ctx);
+    saveSession(ctx);
     console.log(
-        'STATE:',
-        ctx.currentState,
-        'INTENT:',
-        intent.type
+        '[FLOW]',
+        'STATE:', ctx.currentState,
+        'PLAN:', ctx.planGenerated,
+        'INTENT:', intent.type
     );
 
     // Fallback
