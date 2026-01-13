@@ -1,8 +1,12 @@
 import { Itinerary } from '../types/itinerary';
 
 export type EditIntent = {
-    change: 'relax';
+    change: 'relax' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
     day: number;
+    target_day?: number | null;
+    change_type?: 'make_more_relaxed' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
+    target_block?: 'morning' | 'afternoon' | 'evening' | null;
+    raw_instruction?: string;
 };
 
 export function applyDeterministicEdit(
