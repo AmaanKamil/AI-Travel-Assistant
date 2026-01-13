@@ -67,7 +67,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         if (
             text.includes('change') ||
             text.includes('edit') ||
-            text.includes('make day') ||
+            text.includes('make') ||
             text.includes('swap') ||
             text.includes('remove') ||
             text.includes('add')
@@ -124,6 +124,11 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 };
             }
         }
+        // ---- DEFAULT POST PLAN ----
+        return {
+            message: 'You can ask me to explain, edit, or email your itinerary.',
+            currentState: 'READY'
+        };
     }
     // ===============================
     // END HARD ROUTING
