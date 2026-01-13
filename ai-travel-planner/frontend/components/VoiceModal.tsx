@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Mic, X, Loader2, MessageSquare, Mail, RefreshCw, Check } from "lucide-react";
 import TranscriptBox from "./TranscriptBox";
 import { orchestrateTrip, exportItinerary, editItinerary } from "@/lib/api";
+import { toggleRecording } from "@/lib/voice";
 import ItineraryView from "./ItineraryView";
 import SourcesPanel from "./SourcesPanel";
 import PlanningChecks from "./PlanningChecks";
@@ -19,6 +20,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [isProcessing, setIsProcessing] = useState(false);
     const [transcript, setTranscript] = useState("");
     const [pendingTranscript, setPendingTranscript] = useState(""); // New state for confirmation
+    const [showConfirm, setShowConfirm] = useState(false);
     const [responseMessage, setResponseMessage] = useState("");
     const [displayItinerary, setDisplayItinerary] = useState<any>(null);
     const [evaluations, setEvaluations] = useState<any>(null);
@@ -28,8 +30,8 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [email, setEmail] = useState("");
     const [isExporting, setIsExporting] = useState(false);
 
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const chunksRef = useRef<Blob[]>([]);
+    // Refs for playback only
+
 
     const handleExport = async () => {
         if (!email || !displayItinerary) return;
@@ -95,66 +97,15 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         setIsProcessing(false);
     };
 
-    const processAudio = async (blob: Blob) => {
-        setIsProcessing(true);
-        try {
-            const formData = new FormData();
-            formData.append('audio', blob, 'speech.webm');
-
-            const res = await fetch('/api/transcribe', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await res.json();
-            if (data.text) {
-                setPendingTranscript(data.text);
-            }
-        } catch (error) {
-            console.error("Transcription failed", error);
-            setResponseMessage("Sorry, I couldn't hear that properly.");
-        } finally {
-            setIsProcessing(false);
-        }
+    const handleTranscript = (text: string) => {
+        setPendingTranscript(text);
+        setShowConfirm(true);
     };
 
-    const startListening = async () => {
-        setResponseMessage("");
+    const handleMicClick = () => {
         setPendingTranscript("");
-        setTranscript("");
-        window.speechSynthesis.cancel();
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = mediaRecorder;
-            chunksRef.current = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunksRef.current.push(e.data);
-            };
-
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                processAudio(blob);
-
-                // Stop all tracks
-                stream.getTracks().forEach(track => track.stop());
-            };
-
-            mediaRecorder.start();
-            setIsListening(true);
-        } catch (err) {
-            console.error("Error accessing microphone:", err);
-            alert("Could not access microphone.");
-        }
-    };
-
-    const stopListening = () => {
-        if (mediaRecorderRef.current && isListening) {
-            mediaRecorderRef.current.stop();
-            setIsListening(false);
-        }
+        setShowConfirm(false);
+        toggleRecording(setIsListening, handleTranscript);
     };
 
     const confirmTranscript = () => {
@@ -162,12 +113,15 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             setTranscript(pendingTranscript);
             handleSubmit(pendingTranscript);
             setPendingTranscript("");
+            setShowConfirm(false);
         }
     };
 
     const retryListening = () => {
         setPendingTranscript("");
-        startListening();
+        setShowConfirm(false);
+        setResponseMessage("");
+        toggleRecording(setIsListening, handleTranscript);
     };
 
 
@@ -230,22 +184,25 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                                     status={isListening ? "Listening..." : (isProcessing ? "Processing..." : "")}
                                 />
 
-                                {pendingTranscript && (
-                                    <div className="flex items-center gap-4 justify-end animate-in fade-in slide-in-from-top-2">
-                                        <button
-                                            onClick={retryListening}
-                                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 transition-all text-sm font-medium border border-white/10"
-                                        >
-                                            <RefreshCw className="w-4 h-4" />
-                                            Retry
-                                        </button>
-                                        <button
-                                            onClick={confirmTranscript}
-                                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-all text-sm font-medium border border-green-500/20"
-                                        >
-                                            <Check className="w-4 h-4" />
-                                            Confirm
-                                        </button>
+                                {showConfirm && pendingTranscript && (
+                                    <div className="flex flex-col gap-2 p-4 rounded-xl bg-white/5 border border-white/10 animate-in fade-in slide-in-from-top-2">
+                                        <p className="text-sm text-gray-300">I heard: "{pendingTranscript}"</p>
+                                        <div className="flex items-center gap-3 justify-end mt-2">
+                                            <button
+                                                onClick={retryListening}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs font-medium border border-white/10"
+                                            >
+                                                <RefreshCw className="w-3 h-3" />
+                                                Retry
+                                            </button>
+                                            <button
+                                                onClick={confirmTranscript}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-all text-xs font-medium border border-green-500/20"
+                                            >
+                                                <Check className="w-3 h-3" />
+                                                Confirm
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -312,7 +269,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
                     <div className="flex flex-col items-center gap-4">
                         <button
-                            onClick={isListening ? stopListening : startListening}
+                            onClick={handleMicClick}
                             disabled={isProcessing}
                             className={`
                             relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 shadow-lg group
