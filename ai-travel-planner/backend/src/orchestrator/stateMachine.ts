@@ -5,6 +5,7 @@ export type OrchestratorState =
     | 'PLANNING'
     | 'READY'          // Replaces PRESENTING/EVALUATING
     | 'EDITING'
+    | 'EXPLAINING'
     | 'EXPORTING'
     | 'AMBIGUOUS'      // For when we don't know what to do (PARSING is internal, not a waiting state)
     | 'ERROR';
