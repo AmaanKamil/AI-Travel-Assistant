@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
         source: '/api/:path*',
         destination: process.env.NEXT_PUBLIC_BACKEND_URL
           ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/:path*`
-          : 'http://127.0.0.1:5000/api/:path*', // Default local backend port
+          : 'http://127.0.0.1:4000/api/:path*', // Default local backend port
       },
     ];
   },
