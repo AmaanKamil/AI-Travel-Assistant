@@ -9,12 +9,30 @@ if (process.env.OPENAI_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export async function extractIntent(text: string): Promise<Intent> {
+export async function extractIntent(text: string, currentState?: string): Promise<Intent> {
     const start = Date.now();
-    console.log(`[LLM Service] Parsing: "${text}"`);
+    console.log(`[LLM Service] Parsing: "${text}" | State: ${currentState || 'N/A'}`);
     if (!text || text.trim().length === 0) return { type: 'plan_trip', entities: {} };
 
     const normalized = text.trim().toLowerCase();
+
+    // HARD OVERRIDE FOR CONFIRMATION STATE
+    if (currentState === 'CONFIRMING') {
+        if (
+            normalized.includes('yes') ||
+            normalized.includes('generate') ||
+            normalized.includes('go ahead') ||
+            normalized.includes('create') ||
+            normalized.includes('proceed') ||
+            normalized.includes('ok') ||
+            normalized.includes('sure') ||
+            normalized.includes('yep') ||
+            normalized.includes('yeah')
+        ) {
+            console.log('[LLM Service] Hard override: CONFIRM_GENERATE');
+            return { type: 'CONFIRM_GENERATE' };
+        }
+    }
 
     if (
         normalized === 'yes' ||

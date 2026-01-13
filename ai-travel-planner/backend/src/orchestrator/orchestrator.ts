@@ -30,7 +30,7 @@ function nextClarifyingQuestion(field: string): string {
 export async function handleUserInput(sessionId: string, userInput: string) {
     let ctx = getSession(sessionId) || createNewSession(sessionId);
 
-    const intent = await extractIntent(userInput);
+    const intent = await extractIntent(userInput, ctx.currentState);
 
     console.log(`[Orchestrator] Session: ${sessionId} | State: ${ctx.currentState} | Intent: ${intent.type}`);
 
@@ -146,7 +146,6 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     if (ctx.currentState === 'CONFIRMING') {
-        // If plan already generated, never ask again
         if (ctx.planGenerated) {
             ctx.currentState = 'READY';
             saveSession(ctx);
@@ -159,8 +158,6 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
 
         if (intent.type === 'CONFIRM_GENERATE') {
-            console.log('✅ User confirmed. Generating plan.');
-
             ctx.currentState = 'PLANNING';
             saveSession(ctx);
 
@@ -177,7 +174,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             saveSession(ctx);
 
             return {
-                message: 'Here is your itinerary.',
+                message: 'Here is your Dubai itinerary.',
                 itinerary,
                 currentState: 'READY'
             };
