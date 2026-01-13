@@ -14,6 +14,7 @@ export interface SessionContext {
     constraintsCollected: boolean;
     planGenerated: boolean;
     clarificationCount: number;
+    userEmail?: string;
     itinerary?: Itinerary;
     lastEvaluation?: EvaluationReport;
     lastEditIntent?: any;

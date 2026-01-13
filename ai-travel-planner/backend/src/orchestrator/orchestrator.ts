@@ -5,6 +5,10 @@ import { buildItinerary } from '../services/itineraryBuilderMCP';
 import { getGroundedAnswer } from '../services/ragService';
 import { applyDeterministicEdit } from '../services/editEngine';
 import { routePostPlanCommand } from './postPlanRouter';
+import { explainService } from '../services/explainService';
+import * as editEngine from '../services/editEngineWrapper';
+import { pdfService } from '../services/pdfService';
+import { emailService } from '../services/emailService';
 
 const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
 
@@ -30,6 +34,100 @@ function nextClarifyingQuestion(field: string): string {
 
 export async function handleUserInput(sessionId: string, userInput: string) {
     let ctx = getSession(sessionId) || createNewSession(sessionId);
+
+    console.log(
+        '[FLOW]',
+        'STATE:', ctx.currentState,
+        'PLAN:', ctx.planGenerated
+    );
+
+    // ===============================
+    // HARD POST-PLAN ROUTING
+    // ===============================
+    if (ctx.planGenerated) {
+        const text = userInput.toLowerCase();
+        console.log('[POST PLAN MODE] Incoming:', text);
+
+        // ---- EXPLAIN ----
+        if (text.includes('why')) {
+            console.log('→ Routing to EXPLAIN');
+
+            const answer = await explainService.explainPlace(
+                text,
+                ctx.itinerary
+            );
+
+            return {
+                message: answer,
+                currentState: 'READY'
+            };
+        }
+
+        // ---- EDIT ----
+        if (
+            text.includes('change') ||
+            text.includes('edit') ||
+            text.includes('make day') ||
+            text.includes('swap') ||
+            text.includes('remove') ||
+            text.includes('add')
+        ) {
+            console.log('→ Routing to EDIT');
+
+            const updated = await editEngine.applyEdit(
+                text,
+                ctx.itinerary! // Itinerary must exist if planGenerated is true
+            );
+
+            ctx.itinerary = updated;
+
+            return {
+                message: 'I’ve updated your itinerary.',
+                itinerary: updated,
+                currentState: 'READY'
+            };
+        }
+
+        // ---- EXPORT ----
+        if (
+            text.includes('email') ||
+            text.includes('send') ||
+            text.includes('pdf')
+        ) {
+            console.log('→ Routing to EXPORT');
+
+            try {
+                // Use captured email or placeholder if missing
+                const targetEmail = ctx.userEmail || (text.match(/[\w.-]+@[\w.-]+\.\w+/) || [])[0];
+
+                if (!targetEmail) {
+                    return {
+                        message: 'What email address should I send it to?',
+                        currentState: 'READY'
+                    };
+                }
+
+                // Temporary check for pdfService
+                const pdfPath = await pdfService.generate(ctx.itinerary!);
+                await emailService.send(targetEmail, pdfPath);
+
+                return {
+                    message: 'I’ve emailed your itinerary to you.',
+                    currentState: 'READY'
+                };
+            } catch (e) {
+                console.error('EXPORT FAILED', e);
+
+                return {
+                    message: 'I couldn’t send the email. Please try again.',
+                    currentState: 'READY'
+                };
+            }
+        }
+    }
+    // ===============================
+    // END HARD ROUTING
+    // ===============================
 
     const intent = await extractIntent(userInput, ctx.currentState);
 

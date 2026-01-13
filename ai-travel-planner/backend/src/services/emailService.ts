@@ -31,3 +31,7 @@ export async function sendEmail(
         throw new Error('Email sending failed');
     }
 }
+
+export const emailService = {
+    send: sendEmail
+};

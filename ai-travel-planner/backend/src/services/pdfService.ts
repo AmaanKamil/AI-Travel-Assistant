@@ -43,4 +43,9 @@ export async function generatePDF(itinerary: Itinerary): Promise<string> {
             reject(err);
         }
     });
+});
 }
+
+export const pdfService = {
+    generate: generatePDF
+};
