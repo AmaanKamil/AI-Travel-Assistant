@@ -38,11 +38,19 @@ async function startRecording(
                 body: formData
             });
 
-            const data = await res.json();
+            if (!res.ok) {
+                const errText = await res.text();
+                console.error('❌ Transcribe failed:', errText);
+                alert('Speech transcription failed. Check console for details.');
+                return;
+            }
 
+            const data = await res.json();
             onTranscriptReady(data.text);
+
         } catch (err) {
-            alert('Speech transcription failed. Please try again.');
+            console.error('🌐 Network error:', err);
+            alert('Network error while transcribing speech.');
         }
     };
 
