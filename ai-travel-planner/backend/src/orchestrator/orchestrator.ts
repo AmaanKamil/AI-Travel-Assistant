@@ -131,8 +131,12 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             ctx.currentState = 'PLANNING';
             saveSession(ctx);
 
-            const pois = await searchPOIs('Dubai', ctx.collectedConstraints);
-            const itinerary = await buildItinerary(pois, ctx.collectedConstraints);
+            const pois = await searchPOIs(ctx.collectedConstraints.interests || [], []);
+            const itinerary = await buildItinerary(
+                pois,
+                Number(ctx.collectedConstraints.days) || 3,
+                ctx.collectedConstraints.pace || 'medium'
+            );
 
             ctx.itinerary = itinerary;
             ctx.currentState = 'READY';
