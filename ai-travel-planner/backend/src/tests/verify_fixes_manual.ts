@@ -1,7 +1,7 @@
 
-import { buildItinerary } from './src/services/itineraryBuilderMCP';
-import { applyDeterministicEdit } from './src/services/editEngine';
-import { Itinerary } from './src/types/itinerary';
+import { buildItinerary } from '../services/itineraryBuilderMCP';
+import { applyDeterministicEdit } from '../services/editEngine';
+import { Itinerary } from '../types/itinerary';
 
 // MOCK POIs
 const MOCK_POIS = [
