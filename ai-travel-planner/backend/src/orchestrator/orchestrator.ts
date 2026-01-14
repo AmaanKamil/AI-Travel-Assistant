@@ -1,6 +1,6 @@
 import { saveSession, getSession, createNewSession, SessionContext } from './sessionContext';
 import { toCoreState, toLegacyItinerary } from '../core/adapter';
-import { normalizeItinerary as strictNormalize } from '../core/itineraryNormalizer';
+import { reconstructItinerary } from '../core/itineraryReconstructor';
 import { Itinerary } from '../types/itinerary';
 import { extractIntent } from '../services/llmService';
 import { searchPOIs } from '../services/poiSearchMCP';
@@ -105,9 +105,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             );
 
 
-            // STRICT NORMALIZATION GATE
+            // STRICT RECONSTRUCTION GATE
             const coreState = toCoreState(updated);
-            const normalizedState = strictNormalize(coreState);
+            const normalizedState = reconstructItinerary(coreState);
             ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary?.title || "Itinerary");
 
             saveSession(ctx);
@@ -337,9 +337,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 );
 
                 if (itinerary) {
-                    // STRICT NORMALIZATION GATE (PLAN)
+                    // STRICT RECONSTRUCTION GATE (PLAN)
                     const coreState = toCoreState(itinerary);
-                    const normalizedState = strictNormalize(coreState);
+                    const normalizedState = reconstructItinerary(coreState);
                     ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
 
                     const pdf = await pdfService.generate(ctx.itinerary);
