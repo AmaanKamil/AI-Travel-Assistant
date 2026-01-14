@@ -53,16 +53,9 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         setIsProcessing(true);
         let result: any;
 
-        // CLIENT-SIDE ROUTING (Strict Separation)
-        const isEditIntent = /make|change|swap|add|remove|replace|relax/i.test(text);
-
-        if (isEditIntent && displayItinerary) {
-            console.log("Routing to /edit-itinerary");
-            result = await editItinerary("ui-demo", text);
-        } else {
-            console.log("Routing to /orchestrate");
-            result = await orchestrateTrip("ui-demo", text);
-        }
+        // UNCONDITIONAL ROUTING - All intent handling moved to backend orchestrator
+        console.log("Routing to /orchestrate");
+        result = await orchestrateTrip("ui-demo", text);
 
         if (result.error) {
             setResponseMessage(result.message || "Something went wrong.");
