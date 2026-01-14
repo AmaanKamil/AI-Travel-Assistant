@@ -47,27 +47,23 @@ router.post('/edit-itinerary', async (req, res) => {
 
 router.post('/export-itinerary', async (req, res) => {
     // Transactional Export Logic
-    const { sessionId, email } = req.body; // Expecting { sessionId, email }
+    const { email, itinerary } = req.body;
 
-    if (!sessionId || !email) {
-        res.status(400).json({ success: false, message: "Missing sessionId or email" });
+    if (!email || !itinerary) {
+        console.error("[API: Export] Missing email or itinerary payload.");
+        res.status(400).json({ success: false, message: "Missing email or itinerary data." });
         return;
     }
 
-    const ctx = getSession(sessionId);
-
-    if (!ctx || !ctx.itinerary) {
-        return res.status(400).json({
-            success: false,
-            message: 'No itinerary to export.'
-        });
-    }
-
     try {
-        const pdfPath = await generatePDF(ctx.itinerary);
+        console.log(`[API: Export] Generating PDF for ${email}...`);
+        const pdfPath = await generatePDF(itinerary);
+
+        console.log(`[API: Export] Sending email to ${email}...`);
         const emailResult = await emailService.send(email, pdfPath);
 
         if (!emailResult.success) {
+            console.error(`[API: Export] Email Service Failed: ${emailResult.message}`);
             return res.status(500).json({
                 success: false,
                 message: emailResult.message
@@ -78,11 +74,11 @@ router.post('/export-itinerary', async (req, res) => {
             success: true,
             message: 'Your itinerary has been emailed successfully.'
         });
-    } catch (err) {
-        console.error("Export Failed", err);
+    } catch (err: any) {
+        console.error("[API: Export] Internal Error:", err);
         return res.status(500).json({
             success: false,
-            message: 'Export failed. Please try again.'
+            message: 'Export failed due to server error.'
         });
     }
 });

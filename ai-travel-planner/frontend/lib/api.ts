@@ -50,7 +50,7 @@ export const exportItinerary = async (itinerary: any, userEmail: string): Promis
     try {
         const response = await axios.post(`${API_BASE_URL}/api/export-itinerary`, {
             itinerary,
-            userEmail
+            email: userEmail
         });
         return { success: true, message: response.data.message };
     } catch (error: any) {

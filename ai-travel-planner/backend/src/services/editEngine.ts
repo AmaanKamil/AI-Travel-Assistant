@@ -1,12 +1,13 @@
-import { Itinerary } from '../types/itinerary';
+import { Itinerary, TimeBlock } from '../types/itinerary';
 
 export type EditIntent = {
-    change: 'relax' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
-    day: number;
-    target_day?: number | null;
-    change_type?: 'make_more_relaxed' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
+    change: 'relax' | 'swap_activity' | 'add_place' | 'move_activity' | 'replace_activity' | 'other';
+    day: number; // Source Day
+    target_day?: number | null; // Destination Day (for move/swap)
+    change_type?: string;
     target_block?: 'morning' | 'afternoon' | 'evening' | null;
     raw_instruction?: string;
+    new_activity?: string; // For replace/add
 };
 
 export function applyDeterministicEdit(
@@ -14,55 +15,114 @@ export function applyDeterministicEdit(
     intent: EditIntent
 ): Itinerary {
     const copy: Itinerary = JSON.parse(JSON.stringify(itinerary));
-    const targetDayIndex = intent.day - 1;
-    const day = copy.days[targetDayIndex];
+    const sourceDayIdx = intent.day - 1;
+    // Default target day to source day if not specified
+    const targetDayIdx = (intent.target_day || intent.day) - 1;
 
-    if (!day) return copy;
+    const sourceDay = copy.days[sourceDayIdx];
+    const targetDay = copy.days[targetDayIdx];
 
-    // --- STRATEGY: RELAX DAY ---
-    if (intent.change === 'relax' || intent.change_type === 'make_more_relaxed') {
-        // Remove activity with shortest duration or last activity that isn't dinner
-        const eligibleToRemove = day.blocks.filter(b =>
-            !b.time.toLowerCase().includes('dinner') &&
-            !b.time.toLowerCase().includes('lunch')
+    if (!sourceDay) return copy;
+
+    const operation = (intent.change_type || intent.change) as string;
+
+    // --- 1. MOVE ACTIVITY ---
+    if (operation === 'move_activity' && targetDay) {
+        // Find activity to move (heuristic: not meal, matches target_block or last activity)
+        const blockIndex = sourceDay.blocks.findIndex(b =>
+            !b.fixed &&
+            (!intent.target_block || b.time.toLowerCase().includes(intent.target_block))
         );
 
-        if (eligibleToRemove.length > 0) {
-            // Remove the last eligible activity to free up time
-            const toRemove = eligibleToRemove[eligibleToRemove.length - 1];
-            day.blocks = day.blocks.filter(b => b !== toRemove);
+        if (blockIndex !== -1) {
+            const [movedBlock] = sourceDay.blocks.splice(blockIndex, 1);
 
-            // Add a "Leisure" block in its place or at the end
-            day.blocks.push({
+            // Insert into target day (Activity slot)
+            // Heuristic: Insert before dinner if exists, otherwise append
+            const dinnerIdx = targetDay.blocks.findIndex(b => b.type === 'dinner');
+
+            // Update Text
+            movedBlock.description += ` [Moved from Day ${intent.day}]`;
+
+            if (dinnerIdx !== -1) {
+                targetDay.blocks.splice(dinnerIdx, 0, movedBlock);
+            } else {
+                targetDay.blocks.push(movedBlock);
+            }
+        }
+    }
+
+    // --- 2. SWAP ITEMS ---
+    else if (operation === 'swap_activity') {
+        if (!targetDay) return copy;
+
+        // Find blocks to swap (e.g. Evening Day 1 <-> Evening Day 2)
+        // Default to Evening if not specified, or Afternoon
+        const timeSlot = intent.target_block || 'afternoon';
+
+        const sourceBlock = sourceDay.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
+        const targetBlock = targetDay.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
+
+        if (sourceBlock && targetBlock) {
+            // Swap contents but keep times/metadata
+            const tempActivity = sourceBlock.activity;
+            const tempDesc = sourceBlock.description;
+            const tempDur = sourceBlock.duration;
+
+            sourceBlock.activity = targetBlock.activity;
+            sourceBlock.description = targetBlock.description;
+            sourceBlock.duration = targetBlock.duration;
+
+            targetBlock.activity = tempActivity;
+            targetBlock.description = tempDesc;
+            targetBlock.duration = tempDur;
+        }
+    }
+
+    // --- 3. RELAX DAY ---
+    else if (operation === 'relax' || operation === 'make_more_relaxed') {
+        // Rule: Remove 1 activity, increase rest, keep meals
+        // Find non-fixed activity
+        const activityIdx = sourceDay.blocks.findIndex(b => !b.fixed && (b.type === 'activity' || !b.type));
+
+        if (activityIdx !== -1) {
+            sourceDay.blocks.splice(activityIdx, 1); // Remove
+
+            // Add Rest Block
+            sourceDay.blocks.push({
                 time: 'Afternoon Break',
-                activity: 'Leisure & Relaxation',
-                duration: 'Flexible',
-                description: 'Time to relax at a local cafe or pool.'
+                activity: 'Leisure & Hotel Rest',
+                duration: '2 hours',
+                description: 'Time to recharge.',
+                type: 'other',
+                fixed: false
             });
         }
     }
 
-    // --- STRATEGY: MAKE PACKED (ADD) ---
-    if (intent.change_type === 'add_place' || intent.change === 'add_place') {
-        // Add a generic activity in the evening or morning if empty
-        day.blocks.push({
-            time: 'Late Evening',
-            activity: 'Dessert or Late Night Stroll',
-            duration: '45 mins',
-            description: 'Wrap up the day with a quick visit nearby.'
-        });
+    // --- 4. REPLACE ACTIVITY ---
+    else if (operation === 'replace_activity' || operation === 'other') {
+        const block = sourceDay.blocks.find(b =>
+            !b.fixed && (!intent.target_block || b.time.toLowerCase().includes(intent.target_block))
+        );
+
+        if (block) {
+            block.activity = intent.new_activity || "Indoor Activity (Center for Cultural Understanding)";
+            block.description = "Replaced based on request. Great indoor option.";
+            block.duration = "2 hours";
+        }
     }
 
-    // --- STRATEGY: SWAP / CHANGE ---
-    // Simple heuristic: If user said "Swap X", we might not know X perfectly without complex NLP, 
-    // but we can "Change" the main activity of the day.
-    if (intent.change === 'swap_activity' || intent.change === 'other') {
-        // Find a main activity
-        const mainActivity = day.blocks.find(b => b.duration.includes('hour'));
-        if (mainActivity) {
-            mainActivity.activity = `Alternative: ${mainActivity.activity} (Modified)`;
-            mainActivity.description += ' [Swapped based on request]';
-        }
+    // --- 5. PACKED (Legacy Support) ---
+    else if (operation === 'add_place') {
+        sourceDay.blocks.push({
+            time: 'Late Night',
+            activity: 'Dessert or Late Night Stroll',
+            duration: '45 mins',
+            description: 'Wrap up the day with a quick visit nearby.',
+            type: 'activity',
+            fixed: false
+        });
     }
 
     return copy;

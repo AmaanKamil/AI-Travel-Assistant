@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Mic, X, Loader2, MessageSquare, Mail, RefreshCw, Check } from "lucide-react";
+import { Mic, X, Loader2, MessageSquare, Mail, RefreshCw, Check, User } from "lucide-react";
 import TranscriptBox from "./TranscriptBox";
 import { orchestrateTrip, exportItinerary, editItinerary } from "@/lib/api";
 import { toggleRecording } from "@/lib/voice";
@@ -9,19 +9,25 @@ import ItineraryView from "./ItineraryView";
 import SourcesPanel from "./SourcesPanel";
 import PlanningChecks from "./PlanningChecks";
 
-// Removed Window interface for SpeechRecognition as we use MediaRecorder now
-
 interface VoiceModalProps {
     onClose: () => void;
+}
+
+interface Message {
+    role: 'user' | 'assistant';
+    content: string;
 }
 
 export default function VoiceModal({ onClose }: VoiceModalProps) {
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [transcript, setTranscript] = useState("");
-    const [pendingTranscript, setPendingTranscript] = useState(""); // New state for confirmation
+
+    // CHAT HISTORY STATE (Fix D)
+    const [messages, setMessages] = useState<Message[]>([]);
+
+    const [pendingTranscript, setPendingTranscript] = useState("");
     const [showConfirm, setShowConfirm] = useState(false);
-    const [responseMessage, setResponseMessage] = useState("");
+
     const [displayItinerary, setDisplayItinerary] = useState<any>(null);
     const [evaluations, setEvaluations] = useState<any>(null);
     const [citations, setCitations] = useState<any[]>([]);
@@ -29,39 +35,64 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
     const [email, setEmail] = useState("");
     const [isExporting, setIsExporting] = useState(false);
+    const [exportStatus, setExportStatus] = useState<string | null>(null);
 
-    // Refs for playback only
+    // TTS Playback Ref
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    // Scroll ref
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages, pendingTranscript]);
 
     const handleExport = async () => {
         if (!email || !displayItinerary) return;
 
         setIsExporting(true);
+        setExportStatus(null);
+
+        // DIRECT CALL (Fix E)
         const result = await exportItinerary(displayItinerary, email);
+
         if (result.success) {
-            setResponseMessage("I've emailed the itinerary to you!");
-            setEmail(""); // clear input on success
+            setExportStatus("Email sent successfully!");
+            setEmail("");
+            setTimeout(() => setExportStatus(null), 3000);
         } else {
-            setResponseMessage("Failed to send email: " + result.message);
+            setExportStatus("Failed: " + result.message);
         }
         setIsExporting(false);
     };
 
-    const handleSubmit = async (text: string) => {
+    const handleSubmit = async (text: string, isSystemBoot = false) => {
         if (!text) return;
+
+        // Update History (if not hidden system boot)
+        if (!isSystemBoot) {
+            setMessages(prev => [...prev, { role: 'user', content: text }]);
+        }
 
         setIsProcessing(true);
         let result: any;
 
-        // UNCONDITIONAL ROUTING - All intent handling moved to backend orchestrator
+        // UNCONDITIONAL ROUTING
         console.log("Routing to /orchestrate");
         result = await orchestrateTrip("ui-demo", text);
 
         if (result.error) {
-            setResponseMessage(result.message || "Something went wrong.");
-            // Do not clear previous content on error
+            setMessages(prev => [...prev, { role: 'assistant', content: result.message || "Something went wrong." }]);
         } else {
-            setResponseMessage(result.message);
+            // Append assistant response
+            if (result.message) {
+                setMessages(prev => [...prev, { role: 'assistant', content: result.message }]);
+            }
+
             if (result.itinerary) {
                 setDisplayItinerary(result.itinerary);
             }
@@ -73,8 +104,6 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             }
 
             // Handle Edit Highlighting
-            // Note: Backend might return target_day in message or update, 
-            // but for now let's just highlight if regex detects a day
             const dayMatch = text.match(/day\s*(\d+)/i);
             if (dayMatch) {
                 const dayNum = parseInt(dayMatch[1]);
@@ -98,12 +127,13 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const handleMicClick = () => {
         setPendingTranscript("");
         setShowConfirm(false);
+        // If speaking, stop logic (toggleRecording handles this via shared state logic usually, 
+        // but here we just call the helper which toggles based on isListening or creates new recognition)
         toggleRecording(setIsListening, handleTranscript);
     };
 
     const confirmTranscript = () => {
         if (pendingTranscript) {
-            setTranscript(pendingTranscript);
             handleSubmit(pendingTranscript);
             setPendingTranscript("");
             setShowConfirm(false);
@@ -113,15 +143,9 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     const retryListening = () => {
         setPendingTranscript("");
         setShowConfirm(false);
-        setResponseMessage("");
         toggleRecording(setIsListening, handleTranscript);
     };
 
-
-    // TTS Playback Ref
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-
-    // Stop audio when component unmounts or new speech starts
     useEffect(() => {
         return () => {
             if (audioRef.current) {
@@ -135,8 +159,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
     useEffect(() => {
         const initSystem = async () => {
             console.log("Triggering SYSTEM_BOOT...");
-            // Simulate "speech" to trigger orchestrator boot intent
-            await handleSubmit("SYSTEM_BOOT");
+            await handleSubmit("SYSTEM_BOOT", true);
         };
         initSystem();
     }, []);
@@ -156,9 +179,6 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         }
     };
 
-    // Removed old startListening/stopListening as they are redefined above
-
-    // --- UI HELPERS ---
     const validateEmail = (email: string) => {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     };
@@ -181,10 +201,10 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                 </button>
             </div>
 
-            {/* SPLIT LAYOUT (Desktop: Row, Mobile: Stack/Toggle) */}
+            {/* SPLIT LAYOUT */}
             <div className="flex-1 flex overflow-hidden relative">
 
-                {/* LEFT PANEL: CHAT (Always visible on start, toggleable on mobile) */}
+                {/* LEFT PANEL: CHAT */}
                 <div className={`
                     flex-1 flex flex-col min-w-0 bg-gray-900/50 relative transition-all duration-500
                     ${displayItinerary ? 'hidden md:flex md:w-1/3 md:max-w-md border-r border-white/5' : 'w-full'}
@@ -192,24 +212,46 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
                     {/* CHAT MESSAGES AREA */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white/10">
-                        {/* Welcome / Empty State */}
-                        {!transcript && !responseMessage && !displayItinerary && (
+
+                        {/* Empty State */}
+                        {messages.length === 0 && !pendingTranscript && (
                             <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
                                 <Mic className="w-12 h-12 mb-4 text-blue-400 opacity-50" />
                                 <p className="text-lg font-medium">"Plan a 3 day trip to Dubai..."</p>
                             </div>
                         )}
 
-                        {/* Transcript Box (User) */}
-                        {(transcript || pendingTranscript) && (
-                            <div className="space-y-4">
+                        {/* Message History */}
+                        {messages.map((msg, idx) => (
+                            <div key={idx} className={`animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${msg.role === 'assistant' ? 'bg-blue-600' : 'bg-green-600'}`}>
+                                        {msg.role === 'assistant' ? <MessageSquare className="w-3 h-3 text-white" /> : <User className="w-3 h-3 text-white" />}
+                                    </div>
+                                    <span className="text-xs font-bold text-gray-400 uppercase">{msg.role}</span>
+                                </div>
+                                <TranscriptBox transcript={msg.content} isUser={msg.role === 'user'} />
+                            </div>
+                        ))}
+
+                        {/* Recent Evaluations (Attached to bottom of stream if exists) */}
+                        {(evaluations || citations.length > 0) && (
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                {evaluations && <PlanningChecks evaluations={evaluations} />}
+                                <SourcesPanel sources={citations} />
+                            </div>
+                        )}
+
+                        {/* Pending Transcript (User) */}
+                        {pendingTranscript && (
+                            <div className="space-y-4 pt-4">
                                 <TranscriptBox
-                                    transcript={pendingTranscript || transcript}
+                                    transcript={pendingTranscript}
                                     isUser={true}
                                     status={isListening ? "Listening..." : (isProcessing ? "Processing..." : "")}
                                 />
                                 {/* Confirm / Retry UI */}
-                                {showConfirm && pendingTranscript && (
+                                {showConfirm && (
                                     <div className="flex gap-2 justify-end animate-in fade-in slide-in-from-top-2">
                                         <button onClick={retryListening} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs border border-white/10 transition-all">Retry</button>
                                         <button onClick={confirmTranscript} className="px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs border border-green-500/20 transition-all flex items-center gap-2"><Check className="w-3 h-3" /> Confirm</button>
@@ -218,26 +260,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                             </div>
                         )}
 
-                        {/* Assistant Response */}
-                        {responseMessage && (
-                            <div className="animate-in fade-in slide-in-from-left-4 duration-500">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center">
-                                        <MessageSquare className="w-3 h-3 text-white" />
-                                    </div>
-                                    <span className="text-xs font-bold text-gray-400 uppercase">Assistant</span>
-                                </div>
-                                <TranscriptBox transcript={responseMessage} isUser={false} />
-                            </div>
-                        )}
-
-                        {/* Evaluations & Sources Panel (In Chat Stream) */}
-                        {(evaluations || citations.length > 0) && (
-                            <div className="space-y-4 pt-4 border-t border-white/5">
-                                {evaluations && <PlanningChecks evaluations={evaluations} />}
-                                <SourcesPanel sources={citations} />
-                            </div>
-                        )}
+                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* CONTROLS (Sticky Bottom) */}
@@ -257,12 +280,12 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                     </div>
                 </div>
 
-                {/* RIGHT PANEL: ITINERARY (Visible when plan exists) */}
+                {/* RIGHT PANEL: ITINERARY */}
                 {displayItinerary && (
                     <div className="flex-1 overflow-y-auto bg-gray-950 relative border-l border-white/5 scrollbar-hide animate-in slide-in-from-right-10 duration-700">
                         <div className="max-w-3xl mx-auto p-6 md:p-10 space-y-8">
                             {/* Header */}
-                            <div className="flexflex-col gap-2">
+                            <div className="flex flex-col gap-2">
                                 <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
                                     {displayItinerary.title || "Your Dubai Itinerary"}
                                 </h2>
@@ -304,6 +327,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                                         {isExporting ? 'Sending...' : 'Send PDF'}
                                     </button>
                                 </div>
+                                {exportStatus && (
+                                    <p className={`text-xs mt-3 text-center ${exportStatus.includes('Failed') ? 'text-red-400' : 'text-green-400'}`}>
+                                        {exportStatus}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
