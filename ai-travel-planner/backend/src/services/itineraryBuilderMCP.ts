@@ -4,33 +4,33 @@ import { EditIntent } from '../types/intent';
 // Helper to identify "Iconic" POIs
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
 
-// --- CURATED RESTAURANT POOL (Fix B) ---
-type Restaurant = { name: string; cuisine: string };
+// --- CURATED RESTAURANT POOL (Fix B & D) ---
+type Restaurant = { id: string; name: string; cuisine: string; area: string };
 
 const RESTAURANT_POOL: Record<string, Restaurant[]> = {
     'Downtown': [
-        { name: 'Zuma', cuisine: 'Contemporary Japanese' },
-        { name: 'Thiptara', cuisine: 'Thai cuisine with fountain views' },
-        { name: 'Social House', cuisine: 'International flavors' },
-        { name: 'Armani Ristorante', cuisine: 'Italian fine dining' }
+        { id: 'dt1', name: 'Zuma', cuisine: 'Contemporary Japanese', area: 'Downtown' },
+        { id: 'dt2', name: 'Thiptara', cuisine: 'Thai cuisine with fountain views', area: 'Downtown' },
+        { id: 'dt3', name: 'Social House', cuisine: 'International flavors', area: 'Downtown' },
+        { id: 'dt4', name: 'Armani Ristorante', cuisine: 'Italian fine dining', area: 'Downtown' }
     ],
     'Old Dubai': [
-        { name: 'Al Fanar', cuisine: 'Authentic Emirati seafood' },
-        { name: 'Arabian Tea House', cuisine: 'Traditional Emirati breakfast & lunch' },
-        { name: 'XVA Café', cuisine: 'Vegetarian Middle Eastern' }
+        { id: 'od1', name: 'Al Fanar', cuisine: 'Authentic Emirati seafood', area: 'Old Dubai' },
+        { id: 'od2', name: 'Arabian Tea House', cuisine: 'Traditional Emirati breakfast & lunch', area: 'Old Dubai' },
+        { id: 'od3', name: 'XVA Café', cuisine: 'Vegetarian Middle Eastern', area: 'Old Dubai' }
     ],
     'Marina': [
-        { name: 'Pier 7', cuisine: 'Multi-story fine dining' },
-        { name: 'The MAINE Oyster Bar', cuisine: 'Seafood brasserie' },
-        { name: 'Asia Asia', cuisine: 'Pan-Asian fusion' }
+        { id: 'dm1', name: 'Pier 7', cuisine: 'Multi-story fine dining', area: 'Dubai Marina' },
+        { id: 'dm2', name: 'The MAINE Oyster Bar', cuisine: 'Seafood brasserie', area: 'JBR' },
+        { id: 'dm3', name: 'Asia Asia', cuisine: 'Pan-Asian fusion', area: 'Dubai Marina' }
     ],
     'Jumeirah': [
-        { name: '3 Fils', cuisine: 'Modern Asian seafood' },
-        { name: 'The Hamptons Cafe', cuisine: 'Mediterranean inspired' }
+        { id: 'jum1', name: '3 Fils', cuisine: 'Modern Asian seafood', area: 'Jumeirah Fishing Harbour' },
+        { id: 'jum2', name: 'The Hamptons Cafe', cuisine: 'Mediterranean inspired', area: 'Jumeirah' }
     ],
     'Other': [
-        { name: 'Local Gem', cuisine: 'Authentic local dishes' },
-        { name: 'Hidden Garden', cuisine: 'International fusion' }
+        { id: 'oth1', name: 'Local Gem', cuisine: 'Authentic local dishes', area: 'Dubai' },
+        { id: 'oth2', name: 'Hidden Garden', cuisine: 'International fusion', area: 'Dubai' }
     ]
 };
 
@@ -140,7 +140,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
 
                 // Format: Name \n Cuisine, Zone
                 const activityName = `${slot.type === 'lunch' ? 'Lunch' : 'Dinner'} at ${restaurant.name}`;
-                const description = `${restaurant.cuisine}, ${targetZone}`;
+                const description = `${restaurant.cuisine}, ${restaurant.area}`;
 
                 dailyBlocks.push({
                     time: slot.time,

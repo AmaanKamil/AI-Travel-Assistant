@@ -1,4 +1,5 @@
 import { Itinerary, TimeBlock } from '../types/itinerary';
+import { validateAndNormalizeItinerary } from '../utils/itineraryValidator';
 
 export type EditIntent = {
     change: 'relax' | 'swap_activity' | 'add_place' | 'move_activity' | 'replace_activity' | 'other';
@@ -16,18 +17,19 @@ export function applyDeterministicEdit(
 ): Itinerary {
     const copy: Itinerary = JSON.parse(JSON.stringify(itinerary));
     const sourceDayIdx = intent.day - 1;
-    // Default target day to source day if not specified
-    const targetDayIdx = (intent.target_day || intent.day) - 1;
+    // Default target day to source day if not specified. Validate bounds.
+    let targetDayIdx = (intent.target_day || intent.day) - 1;
+
+    if (sourceDayIdx < 0 || sourceDayIdx >= copy.days.length) return copy;
+    if (targetDayIdx < 0 || targetDayIdx >= copy.days.length) targetDayIdx = sourceDayIdx;
 
     const sourceDay = copy.days[sourceDayIdx];
     const targetDay = copy.days[targetDayIdx];
 
-    if (!sourceDay) return copy;
-
     const operation = (intent.change_type || intent.change) as string;
 
     // --- 1. MOVE ACTIVITY ---
-    if (operation === 'move_activity' && targetDay) {
+    if (operation === 'move_activity') {
         // Find activity to move (heuristic: not meal, matches target_block or last activity)
         const blockIndex = sourceDay.blocks.findIndex(b =>
             !b.fixed &&
@@ -38,36 +40,47 @@ export function applyDeterministicEdit(
             // DETACH
             const [movedBlock] = sourceDay.blocks.splice(blockIndex, 1);
 
-            // UPDATE METADATA
-            movedBlock.description += ` [Moved from Day ${intent.day}]`;
+            // AUTO-CORRECT TIME LABEL BASED ON DESTINATION CONTEXT?
+            // If we are appending to the end, it's likely Evening.
+            // If we are inserting before Lunch, it's Morning.
+            // This is "self-healing" logic.
+            const hasLunch = targetDay.blocks.some(b => b.type === 'lunch');
+            const hasDinner = targetDay.blocks.some(b => b.type === 'dinner');
 
-            // RE-ATTACH (Insert before Dinner if exists, or append)
+            // Simple Heuristic for now: Update label to "Moved Activity" or keep original if valid?
+            // Better: validator will strip invalid labels, so let's try to set a neutral one or guess.
+            // If strict slots are Morning/Afternoon, let's look at where we put it.
+
+            // RE-ATTACH
+            // Strategy: Insert before Dinner if exists.
             const dinnerIdx = targetDay.blocks.findIndex(b => b.type === 'dinner');
 
             if (dinnerIdx !== -1) {
                 targetDay.blocks.splice(dinnerIdx, 0, movedBlock);
+                // If it was Morning and now looks like Afternoon (post-lunch), update it.
+                if (hasLunch && movedBlock.time.includes('Morning')) {
+                    movedBlock.time = 'Afternoon';
+                }
             } else {
                 targetDay.blocks.push(movedBlock);
+                movedBlock.time = 'Evening'; // Assumed if post-dinner or no dinner
             }
 
-            // CLEANUP: If source day is now empty of activities (only meals), maybe add a "Free Time" filler?
-            // For now, we leave it as is (lighter day).
+            movedBlock.description += ` [Moved from Day ${intent.day}]`;
         }
     }
 
     // --- 2. SWAP ITEMS ---
     else if (operation === 'swap_activity') {
-        if (!targetDay) return copy;
-
         // Find blocks to swap (e.g. Evening Day 1 <-> Evening Day 2)
         // Default to Evening if not specified, or Afternoon
         const timeSlot = intent.target_block || 'afternoon';
 
         const sourceBlock = sourceDay.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
-        const targetBlock = targetDay.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
+        const targetBlock = targetDay?.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
 
         if (sourceBlock && targetBlock) {
-            // Swap contents but keep times/metadata
+            // Swap contents but keep times/metadata (pure content swap)
             const tempActivity = sourceBlock.activity;
             const tempDesc = sourceBlock.description;
             const tempDur = sourceBlock.duration;
@@ -84,16 +97,15 @@ export function applyDeterministicEdit(
 
     // --- 3. RELAX DAY ---
     else if (operation === 'relax' || operation === 'make_more_relaxed') {
-        // Rule: Remove 1 activity, increase rest, keep meals
-        // Find non-fixed activity
         const activityIdx = sourceDay.blocks.findIndex(b => !b.fixed && (b.type === 'activity' || !b.type));
 
         if (activityIdx !== -1) {
             sourceDay.blocks.splice(activityIdx, 1); // Remove
 
-            // Add Rest Block
-            sourceDay.blocks.push({
-                time: 'Afternoon Break',
+            // Inspect slot to see if we need a filler
+            // If we removed the ONLY activity, the day might be empty between meals.
+            sourceDay.blocks.splice(activityIdx, 0, {
+                time: 'Relaxation',
                 activity: 'Leisure & Hotel Rest',
                 duration: '2 hours',
                 description: 'Time to recharge.',
@@ -116,7 +128,7 @@ export function applyDeterministicEdit(
         }
     }
 
-    // --- 5. PACKED (Legacy Support) ---
+    // --- 5. PACKED ---
     else if (operation === 'add_place') {
         sourceDay.blocks.push({
             time: 'Late Night',
@@ -128,5 +140,6 @@ export function applyDeterministicEdit(
         });
     }
 
-    return copy;
+    // FINAL PASS: VALIDATOR
+    return validateAndNormalizeItinerary(copy);
 }

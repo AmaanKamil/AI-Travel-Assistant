@@ -111,8 +111,9 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                 setTimeout(() => setHighlightDay(null), 2000);
             }
 
-            // Play Voice
-            if (result.audio) {
+            // Play Voice (unless it's an email prompt)
+            const isEmailPrompt = result.message?.toLowerCase().includes('email');
+            if (result.audio && !isEmailPrompt) {
                 playAudio(result.audio);
             }
         }
