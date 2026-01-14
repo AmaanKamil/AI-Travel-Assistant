@@ -1,0 +1,15 @@
+>>> STARTING VERIFICATION >>>
+
+[Test 1] Itinerary Builder Logic
+[MCP: Builder] Building 2-day itinerary with strict slots.
+FAILED: ReferenceError: sanitizeText is not defined
+    at <anonymous> (/Users/amaankamil/Documents/NextLeap Generative AI Bootcamp/Graduation Project - Voice First AI Travel Assistant/ai-travel-planner/backend/src/services/itineraryBuilderMCP.ts:88:59)
+    at Array.filter (<anonymous>)
+    at buildItinerary (/Users/amaankamil/Documents/NextLeap Generative AI Bootcamp/Graduation Project - Voice First AI Travel Assistant/ai-travel-planner/backend/src/services/itineraryBuilderMCP.ts:88:28)
+    at runTests (/Users/amaankamil/Documents/NextLeap Generative AI Bootcamp/Graduation Project - Voice First AI Travel Assistant/ai-travel-planner/backend/src/tests/verify_fixes_manual.ts:19:29)
+    at <anonymous> (/Users/amaankamil/Documents/NextLeap Generative AI Bootcamp/Graduation Project - Voice First AI Travel Assistant/ai-travel-planner/backend/src/tests/verify_fixes_manual.ts:86:1)
+    at Object.<anonymous> (/Users/amaankamil/Documents/NextLeap Generative AI Bootcamp/Graduation Project - Voice First AI Travel Assistant/ai-travel-planner/backend/src/tests/verify_fixes_manual.ts:89:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (/Users/amaankamil/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)

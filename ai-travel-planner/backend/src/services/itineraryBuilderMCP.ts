@@ -5,15 +5,36 @@ import { EditIntent } from '../types/intent';
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
 
 // --- CURATED RESTAURANT POOL (Fix B) ---
-const RESTAURANT_POOL: Record<string, string[]> = {
-    'Downtown': ['Zuma', 'Armani Ristorante', 'Social House', 'Thiptara', 'La Serre', 'Karam Beirut', 'Claw BBQ'],
-    'Old Dubai': ['Al Fanar', 'Arabian Tea House', 'Ravi Restaurant', 'Sikka Café', 'XVA Café', 'Aroos Damascus'],
-    'Marina': ['Pier 7', 'Bussola', 'The Cheesecake Factory', 'Asia Asia', 'Fish Beach Taverna', 'The MAINE Oyster Bar', 'Catch 22'],
-    'Jumeirah': ['Nobu', 'Ossiano', '101 Dining Lounge', 'The Beach House', 'Maiden Shanghai'],
-    'Other': ['Local Gem', 'Hidden Cafe', 'Street Food Market']
+type Restaurant = { name: string; cuisine: string };
+
+const RESTAURANT_POOL: Record<string, Restaurant[]> = {
+    'Downtown': [
+        { name: 'Zuma', cuisine: 'Contemporary Japanese' },
+        { name: 'Thiptara', cuisine: 'Thai cuisine with fountain views' },
+        { name: 'Social House', cuisine: 'International flavors' },
+        { name: 'Armani Ristorante', cuisine: 'Italian fine dining' }
+    ],
+    'Old Dubai': [
+        { name: 'Al Fanar', cuisine: 'Authentic Emirati seafood' },
+        { name: 'Arabian Tea House', cuisine: 'Traditional Emirati breakfast & lunch' },
+        { name: 'XVA Café', cuisine: 'Vegetarian Middle Eastern' }
+    ],
+    'Marina': [
+        { name: 'Pier 7', cuisine: 'Multi-story fine dining' },
+        { name: 'The MAINE Oyster Bar', cuisine: 'Seafood brasserie' },
+        { name: 'Asia Asia', cuisine: 'Pan-Asian fusion' }
+    ],
+    'Jumeirah': [
+        { name: '3 Fils', cuisine: 'Modern Asian seafood' },
+        { name: 'The Hamptons Cafe', cuisine: 'Mediterranean inspired' }
+    ],
+    'Other': [
+        { name: 'Local Gem', cuisine: 'Authentic local dishes' },
+        { name: 'Hidden Garden', cuisine: 'International fusion' }
+    ]
 };
 
-const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'dinner'): string => {
+const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'dinner'): Restaurant => {
     const pool = RESTAURANT_POOL[zone] || RESTAURANT_POOL['Other'];
     // Deterministic rotation based on day and type
     const index = (dayNum * (type === 'lunch' ? 2 : 3)) % pool.length;
@@ -52,7 +73,6 @@ const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
     if (!prevLoc || !currLoc) return "Start";
 
     const dist = haversineDistance(prevLoc.lat, prevLoc.lng, currLoc.lat, currLoc.lng);
-    const timeInMins = Math.round((dist / 30) * 60); // 30km/h avg speed
 
     if (dist < 2) return "10-20 mins (Same Area)";
     if (dist < 10) return "25-40 mins (Nearby)";
@@ -97,9 +117,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         // --- STRICT SLOTS (Fix A) ---
         // 1. Morning: Sightseeing (No Lunch/Dinner)
         // 2. Lunch: Fixed 45m
-        // 3. Afternoon: Activity
+        // 3. Afternoon: Activity (No Dinner)
         // 4. Dinner: Fixed 45m
-        // 5. Evening: Optional
+        // 5. Evening: Optional (No Lunch)
 
         const slots = [
             { time: 'Morning', type: 'activity', max: 1 },
@@ -117,18 +137,23 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             // LUNCH & DINNER (Fix B)
             if (slot.type === 'lunch' || slot.type === 'dinner') {
                 const restaurant = getRestaurantForZone(targetZone, i, slot.type as 'lunch' | 'dinner');
+
+                // Format: Name \n Cuisine, Zone
+                const activityName = `${slot.type === 'lunch' ? 'Lunch' : 'Dinner'} at ${restaurant.name}`;
+                const description = `${restaurant.cuisine}, ${targetZone}`;
+
                 dailyBlocks.push({
                     time: slot.time,
-                    activity: `${slot.type === 'lunch' ? 'Lunch' : 'Dinner'} at ${restaurant}`,
+                    activity: activityName,
                     duration: slot.duration!,
-                    description: `Enjoy ${slot.type} at ${restaurant}, a top detailed choice in ${targetZone}.`,
+                    description: description,
                     type: slot.type as any,
                     fixed: true
                 });
                 continue;
             }
 
-            // ACTIVITIES
+            // ACTIVITIES (Strict Contamination Check)
             const count = slot.max || 1;
             for (let k = 0; k < count; k++) {
                 let selectedPOI = null;

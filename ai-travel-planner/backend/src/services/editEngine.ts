@@ -35,20 +35,23 @@ export function applyDeterministicEdit(
         );
 
         if (blockIndex !== -1) {
+            // DETACH
             const [movedBlock] = sourceDay.blocks.splice(blockIndex, 1);
 
-            // Insert into target day (Activity slot)
-            // Heuristic: Insert before dinner if exists, otherwise append
-            const dinnerIdx = targetDay.blocks.findIndex(b => b.type === 'dinner');
-
-            // Update Text
+            // UPDATE METADATA
             movedBlock.description += ` [Moved from Day ${intent.day}]`;
+
+            // RE-ATTACH (Insert before Dinner if exists, or append)
+            const dinnerIdx = targetDay.blocks.findIndex(b => b.type === 'dinner');
 
             if (dinnerIdx !== -1) {
                 targetDay.blocks.splice(dinnerIdx, 0, movedBlock);
             } else {
                 targetDay.blocks.push(movedBlock);
             }
+
+            // CLEANUP: If source day is now empty of activities (only meals), maybe add a "Free Time" filler?
+            // For now, we leave it as is (lighter day).
         }
     }
 

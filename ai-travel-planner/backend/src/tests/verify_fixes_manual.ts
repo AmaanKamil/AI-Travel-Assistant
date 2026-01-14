@@ -26,14 +26,20 @@ async function runTests() {
     if (!lunch || !lunch.fixed || lunch.duration !== '45 mins') throw new Error("Lunch slot invalid");
     if (!dinner || !dinner.fixed || dinner.duration !== '45 mins') throw new Error("Dinner slot invalid");
 
-    // Check Restaurant Name
-    // Day 1 Downtown Lunch -> Zuma (index 0 for lunch)
+    // Check Restaurant Name & Format
+    // Day 1 Downtown Lunch -> Zuma
+    // Description should be: "Contemporary Japanese, Downtown"
     console.log("Lunch Activity:", lunch.activity);
+    console.log("Lunch Description:", lunch.description);
+
     if (!lunch.activity.includes('Zuma') && !lunch.activity.includes('Armani') && !lunch.activity.includes('Lunch')) {
         console.warn("Warning: Restaurant name not matching expected pattern? Got: " + lunch.activity);
     }
+    if (!lunch.description?.includes(',')) {
+        console.warn("Warning: Cuisine/Zone not found in description? Got: " + lunch.description);
+    }
 
-    console.log("Day 1 Blocks:", day1.blocks.map(b => `${b.time}: ${b.activity} (${b.duration})`));
+    console.log("Day 1 Blocks:", day1.blocks.map(b => `[${b.time}] ${b.activity}\n   -> ${b.description}`));
 
 
     // 2. TEST EDITING (Fix F)
