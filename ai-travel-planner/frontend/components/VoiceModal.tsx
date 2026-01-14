@@ -158,27 +158,49 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
     // Removed old startListening/stopListening as they are redefined above
 
+    // --- UI HELPERS ---
+    const validateEmail = (email: string) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
+    const isValidEmail = validateEmail(email);
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-500">
-            <div className="relative w-full max-w-2xl bg-gray-900/95 border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-
-                {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                        <h2 className="text-xl font-semibold text-white">AI Travel Assistant</h2>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-all">
-                        <X className="w-5 h-5 text-gray-400 hover:text-white" />
-                    </button>
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-950 text-white animate-in fade-in duration-300">
+            {/* TOOLBAR */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/40 backdrop-blur-md z-10">
+                <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                    <h1 className="text-lg font-bold tracking-tight">Dubai AI Planner</h1>
                 </div>
+                <button
+                    onClick={onClose}
+                    className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                >
+                    <X className="w-6 h-6 text-gray-400 hover:text-white" />
+                </button>
+            </div>
 
-                {/* Content Area - Scrollable */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide">
+            {/* SPLIT LAYOUT (Desktop: Row, Mobile: Stack/Toggle) */}
+            <div className="flex-1 flex overflow-hidden relative">
 
-                    {/* Transcript / Chat Area */}
-                    <div className="space-y-6">
-                        {/* User Transcript */}
+                {/* LEFT PANEL: CHAT (Always visible on start, toggleable on mobile) */}
+                <div className={`
+                    flex-1 flex flex-col min-w-0 bg-gray-900/50 relative transition-all duration-500
+                    ${displayItinerary ? 'hidden md:flex md:w-1/3 md:max-w-md border-r border-white/5' : 'w-full'}
+                `}>
+
+                    {/* CHAT MESSAGES AREA */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-white/10">
+                        {/* Welcome / Empty State */}
+                        {!transcript && !responseMessage && !displayItinerary && (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                                <Mic className="w-12 h-12 mb-4 text-blue-400 opacity-50" />
+                                <p className="text-lg font-medium">"Plan a 3 day trip to Dubai..."</p>
+                            </div>
+                        )}
+
+                        {/* Transcript Box (User) */}
                         {(transcript || pendingTranscript) && (
                             <div className="space-y-4">
                                 <TranscriptBox
@@ -186,26 +208,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                                     isUser={true}
                                     status={isListening ? "Listening..." : (isProcessing ? "Processing..." : "")}
                                 />
-
+                                {/* Confirm / Retry UI */}
                                 {showConfirm && pendingTranscript && (
-                                    <div className="flex flex-col gap-2 p-4 rounded-xl bg-white/5 border border-white/10 animate-in fade-in slide-in-from-top-2">
-                                        <p className="text-sm text-gray-300">I heard: "{pendingTranscript}"</p>
-                                        <div className="flex items-center gap-3 justify-end mt-2">
-                                            <button
-                                                onClick={retryListening}
-                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all text-xs font-medium border border-white/10"
-                                            >
-                                                <RefreshCw className="w-3 h-3" />
-                                                Retry
-                                            </button>
-                                            <button
-                                                onClick={confirmTranscript}
-                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 transition-all text-xs font-medium border border-green-500/20"
-                                            >
-                                                <Check className="w-3 h-3" />
-                                                Confirm
-                                            </button>
-                                        </div>
+                                    <div className="flex gap-2 justify-end animate-in fade-in slide-in-from-top-2">
+                                        <button onClick={retryListening} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs border border-white/10 transition-all">Retry</button>
+                                        <button onClick={confirmTranscript} className="px-3 py-1.5 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs border border-green-500/20 transition-all flex items-center gap-2"><Check className="w-3 h-3" /> Confirm</button>
                                     </div>
                                 )}
                             </div>
@@ -213,86 +220,94 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
 
                         {/* Assistant Response */}
                         {responseMessage && (
-                            <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-                                <div className="flex items-center gap-2 mb-2 px-1">
-                                    <MessageSquare className="w-4 h-4 text-blue-400" />
-                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Assistant</span>
+                            <div className="animate-in fade-in slide-in-from-left-4 duration-500">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center">
+                                        <MessageSquare className="w-3 h-3 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-gray-400 uppercase">Assistant</span>
                                 </div>
-                                <TranscriptBox
-                                    transcript={responseMessage}
-                                    isUser={false}
-                                />
+                                <TranscriptBox transcript={responseMessage} isUser={false} />
+                            </div>
+                        )}
+
+                        {/* Evaluations & Sources Panel (In Chat Stream) */}
+                        {(evaluations || citations.length > 0) && (
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                {evaluations && <PlanningChecks evaluations={evaluations} />}
+                                <SourcesPanel sources={citations} />
                             </div>
                         )}
                     </div>
 
-                    {/* Rich Components Area */}
-                    {(displayItinerary || evaluations || citations.length > 0) && (
-                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
-
-                            {/* Visual Separator */}
-                            <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-                            {/* Planning Checks & Sources Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {evaluations && <PlanningChecks evaluations={evaluations} />}
-                                <SourcesPanel sources={citations} />
-                            </div>
-
-                            {/* Detailed Itinerary */}
-                            {displayItinerary && (
-                                <ItineraryView itinerary={displayItinerary} highlightDay={highlightDay} />
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer / Controls */}
-                <div className="p-8 border-t border-white/5 flex flex-col items-center gap-6 bg-gradient-to-t from-black/20 to-transparent">
-                    {/* Export Section */}
-                    {displayItinerary && (
-                        <div className="w-full flex items-center justify-between gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
-                            <input
-                                type="email"
-                                placeholder="Enter your email to receive this plan"
-                                className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 border-none focus:ring-0 outline-none"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                            <button
-                                onClick={handleExport}
-                                disabled={isExporting || !email}
-                                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                            >
-                                {isExporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
-                                {isExporting ? "Sending..." : "Send to Email"}
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col items-center gap-4">
+                    {/* CONTROLS (Sticky Bottom) */}
+                    <div className="p-4 bg-gradient-to-t from-gray-950 to-transparent flex flex-col items-center gap-4">
                         <button
                             onClick={handleMicClick}
                             disabled={isProcessing}
                             className={`
-                            relative flex items-center justify-center w-20 h-20 rounded-full transition-all duration-300 shadow-lg group
-                            ${isListening ? 'bg-red-500 scale-110 shadow-red-500/50 animate-pulse' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/50'}
-                            ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
+                                relative flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 shadow-xl
+                                ${isListening ? 'bg-red-500 scale-110 shadow-red-500/40 animate-pulse' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'}
+                                ${isProcessing ? 'opacity-50 cursor-not-allowed bg-gray-700' : ''}
+                            `}
                         >
-                            <div className="absolute inset-0 rounded-full bg-inherit animate-ping opacity-20 group-hover:opacity-40" />
-                            {isProcessing ? (
-                                <Loader2 className="w-8 h-8 text-white animate-spin" />
-                            ) : (
-                                <Mic className={`w-8 h-8 text-white ${isListening ? 'scale-110' : ''}`} />
-                            )}
+                            {isProcessing ? <Loader2 className="w-6 h-6 animate-spin text-white" /> : <Mic className="w-6 h-6 text-white" />}
                         </button>
-                        <p className="text-[10px] text-gray-500 font-medium uppercase tracking-[0.2em]">
-                            {isListening ? "Listening..." : isProcessing ? "Thinking..." : "Tap to Speak"}
-                        </p>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">{isListening ? 'Listening...' : isProcessing ? 'Thinking...' : 'Tap to Speak'}</p>
                     </div>
-
                 </div>
+
+                {/* RIGHT PANEL: ITINERARY (Visible when plan exists) */}
+                {displayItinerary && (
+                    <div className="flex-1 overflow-y-auto bg-gray-950 relative border-l border-white/5 scrollbar-hide animate-in slide-in-from-right-10 duration-700">
+                        <div className="max-w-3xl mx-auto p-6 md:p-10 space-y-8">
+                            {/* Header */}
+                            <div className="flexflex-col gap-2">
+                                <h2 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+                                    {displayItinerary.title || "Your Dubai Itinerary"}
+                                </h2>
+                                <p className="text-gray-400 text-sm">Generated by AI • Editable via Voice</p>
+                            </div>
+
+                            {/* Itinerary Component */}
+                            <ItineraryView itinerary={displayItinerary} highlightDay={highlightDay} />
+
+                            {/* EMAIL ACTION */}
+                            <div className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
+                                <div className="flex flex-col sm:flex-row gap-4 items-center">
+                                    <div className="flex-1 w-full">
+                                        <label className="text-xs text-gray-400 mb-1.5 block ml-1">Send to Email</label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                            <input
+                                                type="email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                placeholder="name@example.com"
+                                                className={`w-full bg-black/20 border rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:ring-2 outline-none transition-all
+                                                     ${isValidEmail ? 'border-white/10 focus:border-blue-500 focus:ring-blue-500/20' : 'border-red-500/20 focus:border-red-500 focus:ring-red-500/10'}
+                                                 `}
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleExport}
+                                        disabled={isExporting || !isValidEmail}
+                                        className={`
+                                             px-6 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center gap-2 w-full sm:w-auto justify-center mt-6 sm:mt-0
+                                             ${isValidEmail && !isExporting
+                                                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20'
+                                                : 'bg-gray-800 text-gray-500 cursor-not-allowed'}
+                                         `}
+                                    >
+                                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                                        {isExporting ? 'Sending...' : 'Send PDF'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

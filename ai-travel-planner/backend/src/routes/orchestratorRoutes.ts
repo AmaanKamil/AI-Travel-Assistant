@@ -32,7 +32,7 @@ router.post('/orchestrate', async (req, res) => {
 });
 
 import { generatePDF } from '../services/pdfService';
-import { sendEmail } from '../services/emailService';
+import { emailService } from '../services/emailService';
 
 // import { parseEditIntent, applyEdit } from '../services/editEngine';
 import { getSession, saveSession } from '../orchestrator/sessionContext';
@@ -65,7 +65,14 @@ router.post('/export-itinerary', async (req, res) => {
 
     try {
         const pdfPath = await generatePDF(ctx.itinerary);
-        await sendEmail(email, pdfPath);
+        const emailResult = await emailService.send(email, pdfPath);
+
+        if (!emailResult.success) {
+            return res.status(500).json({
+                success: false,
+                message: emailResult.message
+            });
+        }
 
         return res.json({
             success: true,

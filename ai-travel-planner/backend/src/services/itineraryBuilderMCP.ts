@@ -49,16 +49,18 @@ const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
 };
 
 const getDuration = (category: string, pace: string): string => {
-    const isRelaxed = pace === 'relaxed';
     const cat = category.toLowerCase();
 
-    if (cat.includes('museum') || cat.includes('theme park')) return isRelaxed ? '3 hours' : '2.5 hours';
-    if (cat.includes('mall') || cat.includes('souk') || cat.includes('market')) return isRelaxed ? '2.5 hours' : '1.5 hours';
-    if (cat.includes('beach') || cat.includes('park')) return isRelaxed ? '3 hours' : '1 hour';
-    if (cat.includes('restaurant') || cat.includes('cafe')) return isRelaxed ? '2 hours' : '1 hour';
-    if (cat.includes('landmark') || cat.includes('sight')) return '45 mins';
+    // UPDATED LOGIC per User Request
+    if (cat.includes('landmark') || cat.includes('sight')) return '90 mins';
+    if (cat.includes('mall') || cat.includes('souk')) return '120 mins';
+    if (cat.includes('museum')) return '90 mins';
+    if (cat.includes('cafe')) return '45 mins';
 
-    return '1.5 hours'; // Default
+    if (cat.includes('theme park')) return '4 hours';
+    if (cat.includes('beach')) return '3 hours';
+
+    return '90 mins'; // Default
 };
 
 
@@ -66,101 +68,96 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
     console.log(`[MCP: Builder] Building ${days}-day itinerary with ${pois.length} RAW POIs. Pace: ${pace}`);
 
     // FILTER: Apply Strict Validation First
-    // FILTER: Apply Strict Validation First
     const validPOIs = pois.filter(p => sanitizeText(p.name) && isValidPOI(p));
-    console.log(`[MCP: Builder] Validated POIs: ${validPOIs.length} / ${pois.length}`);
 
     const plans: DayPlan[] = [];
-    const usedPOI_IDs = new Set<string>(); // Global Deduplication Trackers
+    const usedPOI_IDs = new Set<string>();
 
-    // Define Zone Priority per Day (Round Robin)
+    // Define Zone Priority per Day
     const ZONES = ['Downtown', 'Old Dubai', 'Marina', 'Jumeirah', 'Other'];
-
-    // Day 1 -> Downtown, Day 2 -> Old Dubai, Day 3 -> Marina, etc.
     const getZoneForDay = (dayNum: number) => ZONES[(dayNum - 1) % ZONES.length];
 
     for (let i = 1; i <= days; i++) {
         const dailyBlocks: TimeBlock[] = [];
         const targetZone = getZoneForDay(i);
-        console.log(`[MCP: Builder] Day ${i} Priority Zone: ${targetZone}`);
 
-        let slots = ['Morning', 'Afternoon', 'Evening'];
-        let maxItems = 3;
+        // Define Slots structure (Meal slots fixed)
+        // Morning -> Lunch -> Afternoon -> Dinner -> Evening (optional)
+        const timeConfigs = [
+            { time: 'Morning', type: 'activity', max: 1 },
+            { time: '12:30 PM', type: 'lunch', duration: '1h 30m', fixed: true },
+            { time: 'Afternoon', type: 'activity', max: pace === 'packed' ? 2 : 1 },
+            { time: '07:00 PM', type: 'dinner', duration: '2h', fixed: true },
+        ];
 
-        if (pace === 'relaxed') {
-            slots = ['Morning', 'Late Afternoon', 'Dinner'];
-            maxItems = 3;
-        } else if (pace === 'packed') {
-            slots = ['Morning', 'Lunch', 'Afternoon', 'Sunset', 'Dinner'];
-            maxItems = 5;
+        if (pace === 'packed') {
+            timeConfigs.push({ time: 'Late Evening', type: 'activity', max: 1 });
         }
 
-        let dayItemCount = 0;
-        let lastLocation = null; // For travel time calc
-
-        // Filter POIs for this Day's Zone (Using Validated List)
+        let lastLocation = null;
         let zonePOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || (!p.location.zone && targetZone === 'Other')));
-
-        // If we run out of zone specific items, allow fallback to high score items globally
         let fallbackPOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
 
-        for (const slot of slots) {
-            if (dayItemCount >= maxItems) break;
+        for (const config of timeConfigs) {
 
-            let selectedPOI = null;
-
-            // STRATEGY: 
-            // 1. Try to find an ICONIC item in the ZONE (Best case)
-            // 2. Try to find ANY item in the ZONE
-            // 3. Fallback to ICONIC item ANYWHERE (If zone is dry)
-
-            // 1. Iconic in Zone
-            const iconicInZone = zonePOIs.find(p => isIconic(p));
-            if (iconicInZone) {
-                selectedPOI = iconicInZone;
-            }
-            // 2. Standard in Zone
-            else if (zonePOIs.length > 0) {
-                selectedPOI = zonePOIs[0]; // Already sorted by score
-            }
-            // 3. Fallback Iconic (Sacrifice geography for quality)
-            else if (fallbackPOIs.some(p => isIconic(p))) {
-                selectedPOI = fallbackPOIs.find(p => isIconic(p));
-            }
-            // 4. Fallback Any
-            else if (fallbackPOIs.length > 0) {
-                selectedPOI = fallbackPOIs[0];
-            }
-
-            if (selectedPOI) {
-                const duration = getDuration(selectedPOI.category, pace);
-                const travelTime = slots.indexOf(slot) > 0 ? estimateTravelTime(lastLocation, selectedPOI.location) : "Start";
-
+            // LUNCH SLOT
+            if (config.type === 'lunch') {
                 dailyBlocks.push({
-                    time: slot,
-                    activity: `Visit ${selectedPOI.name} (${selectedPOI.location.zone || 'Dubai'})`,
-                    duration: duration,
-                    description: `Experience ${selectedPOI.category}. Travel: ${travelTime}.`
+                    time: config.time,
+                    activity: `Lunch in ${targetZone}`,
+                    duration: config.duration!,
+                    description: `Enjoy local cuisine near your morning activities.`
                 });
-
-                dayItemCount++;
-                usedPOI_IDs.add(selectedPOI.id);
-                lastLocation = selectedPOI.location;
-
-                // Refresh lists
-                zonePOIs = zonePOIs.filter(p => p.id !== selectedPOI.id);
-                fallbackPOIs = fallbackPOIs.filter(p => p.id !== selectedPOI.id);
+                continue;
             }
-        }
 
-        // Ensure at least 2 items per day
-        if (dailyBlocks.length < 2) {
-            dailyBlocks.push({
-                time: 'Evening',
-                activity: `Explore Local Area in ${targetZone}`,
-                duration: '1 hour',
-                description: 'Relaxed walking tour.'
-            });
+            // DINNER SLOT
+            if (config.type === 'dinner') {
+                dailyBlocks.push({
+                    time: config.time,
+                    activity: `Dinner in ${targetZone}`,
+                    duration: config.duration!,
+                    description: `Dining experience in the ${targetZone} area.`
+                });
+                continue;
+            }
+
+            // ACTIVITY SLOTS
+            // Pick BEST available POI
+            const count = config.max || 1;
+            for (let c = 0; c < count; c++) {
+                let selectedPOI = null;
+
+                // 1. Iconic in Zone
+                const iconicInZone = zonePOIs.find(p => isIconic(p));
+                if (iconicInZone) selectedPOI = iconicInZone;
+                // 2. Standard in Zone
+                else if (zonePOIs.length > 0) selectedPOI = zonePOIs[0];
+                // 3. Fallback Iconic
+                else if (fallbackPOIs.some(p => isIconic(p))) selectedPOI = fallbackPOIs.find(p => isIconic(p));
+                // 4. Fallback Any
+                else if (fallbackPOIs.length > 0) selectedPOI = fallbackPOIs[0];
+
+                if (selectedPOI) {
+                    const duration = getDuration(selectedPOI.category, pace);
+                    const travelTime = dailyBlocks.length > 0 ? estimateTravelTime(lastLocation, selectedPOI.location) : "Start";
+
+                    dailyBlocks.push({
+                        time: `${config.time}${count > 1 ? ` (${c + 1})` : ''}`,
+                        activity: `Visit ${selectedPOI.name}`,
+                        duration: duration,
+                        description: `Experience ${selectedPOI.category} in ${selectedPOI.location.zone || 'Dubai'}. Travel: ${travelTime}.`
+                    });
+
+                    usedPOI_IDs.add(selectedPOI.id);
+                    lastLocation = selectedPOI.location;
+                    zonePOIs = zonePOIs.filter(p => p.id !== selectedPOI.id);
+                    fallbackPOIs = fallbackPOIs.filter(p => p.id !== selectedPOI.id);
+                } else {
+                    // NO POI LEFT - Add filler check?
+                    // If we really run out, maybe skip slot
+                }
+            }
         }
 
         plans.push({
@@ -169,20 +166,23 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         });
     }
 
-    // TRIP-LEVEL VALIDATION
-    const tripHasCultural = plans.some(d => d.blocks.some(b => /museum|souk|mosque|heritage/i.test(b.activity)));
+    // MANDATE: Cultural Check (Must include Al Fahidi/Museum if missing)
+    const tripHasCultural = plans.some(d => d.blocks.some(b => /museum|souk|mosque|heritage|fahidi/i.test(b.activity)));
 
     if (!tripHasCultural && plans.length > 0) {
-        plans[0].blocks[0] = {
-            time: 'Morning',
-            activity: 'Visit Dubai Museum & Al Fahidi Fort (Cultural Mandate)',
-            duration: '2 hours',
-            description: 'Dive into history. Travel: 15 mins taxi.'
-        };
+        // Insert at Day 1 Morning
+        if (plans[0].blocks.length > 0 && plans[0].blocks[0].type !== 'lunch') {
+            plans[0].blocks[0] = {
+                time: 'Morning',
+                activity: 'Visit Dubai Museum & Al Fahidi Fort',
+                duration: '2 hours',
+                description: 'Dive into history. Cultural Mandate.'
+            };
+        }
     }
 
     return {
-        title: `Your ${days}-Day Dubai Adventure (${pace} pace)`,
+        title: `Your ${days}-Day Dubai Adventure (${pace})`,
         days: plans
     };
 }

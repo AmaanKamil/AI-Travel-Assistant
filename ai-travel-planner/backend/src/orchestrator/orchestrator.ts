@@ -35,6 +35,28 @@ function nextClarifyingQuestion(field: string): string {
 export async function handleUserInput(sessionId: string, userInput: string) {
     let ctx = getSession(sessionId) || createNewSession(sessionId);
 
+    // --- INPUT VALIDATION (Stabilization) ---
+    // 1. Language Check: Reject non-English (simple heuristic: high non-ascii count)
+    // 2. Domain Check: Reject obvious non-Dubai context if possible (though harder strictly without LLM, we can rely on system prompting later, but here we can filter noise)
+
+    const nonAsciiCount = (userInput.match(/[^\x00-\x7F]/g) || []).length;
+    if (nonAsciiCount > userInput.length * 0.2) {
+        return {
+            message: 'I’m a Dubai travel planning assistant. I can help you plan a 2 to 4 day trip to Dubai.',
+            currentState: ctx.currentState
+        };
+    }
+
+    // Short-circuit for very obvious unrelated non-travel spam if needed,
+    // but strict "Dubai" keyword check might be too aggressive for "yes"/"no" answers.
+    // We will rely on the prompt to handle "Write me a poem" but we can block known jailbreaks or gibberish here.
+    if (userInput.length > 500) {
+        return {
+            message: 'That message is a bit too long. Could you summarize your request?',
+            currentState: ctx.currentState
+        };
+    }
+
     console.log(
         '[FLOW]',
         'STATE:', ctx.currentState,
