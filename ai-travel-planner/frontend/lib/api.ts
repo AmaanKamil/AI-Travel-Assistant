@@ -48,7 +48,7 @@ export const editItinerary = async (sessionId: string, editCommand: string): Pro
 
 export const exportItinerary = async (itinerary: any, userEmail: string): Promise<{ success: boolean; message: string }> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/api/export-itinerary`, {
+        const response = await axios.post(`${API_BASE_URL}/api/send-itinerary-email`, {
             itinerary,
             email: userEmail
         });

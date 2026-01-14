@@ -83,4 +83,23 @@ router.post('/export-itinerary', async (req, res) => {
     }
 });
 
+router.post('/send-itinerary-email', async (req, res) => {
+    const { email, itinerary } = req.body;
+    if (!email || !itinerary) {
+        res.status(400).json({ success: false, message: "Missing email or itinerary data." });
+        return;
+    }
+    try {
+        const pdfPath = await generatePDF(itinerary);
+        const emailResult = await emailService.send(email, pdfPath);
+        if (!emailResult.success) {
+            return res.status(500).json({ success: false, message: emailResult.message });
+        }
+        return res.json({ success: true, message: 'Your itinerary has been emailed successfully.' });
+    } catch (err: any) {
+        console.error("[API: Export] Internal Error:", err);
+        return res.status(500).json({ success: false, message: 'Export failed due to server error.' });
+    }
+});
+
 export default router;

@@ -1,4 +1,7 @@
-import { getSession, createNewSession, saveSession, SessionContext } from './sessionContext';
+import { saveSession, loadSession } from '../utils/sessionManager';
+import { toCoreState, normalizeItinerary as strictNormalize, toLegacyItinerary } from '../core/adapter';
+import { Itinerary } from '../types/itinerary';
+import { getSession, createNewSession, SessionContext } from './sessionContext';
 import { extractIntent } from '../services/llmService';
 import { searchPOIs } from '../services/poiSearchMCP';
 import { buildItinerary } from '../services/itineraryBuilderMCP';
@@ -11,12 +14,9 @@ import { pdfService } from '../services/pdfService';
 import { emailService } from '../services/emailService';
 
 const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
-
-function getMissingField(ctx: SessionContext): string | null {
-    for (const f of REQUIRED_FIELDS) {
-        if (!(ctx.collectedConstraints as any)[f]) return f;
+if (!(ctx.collectedConstraints as any)[f]) return f;
     }
-    return null;
+return null;
 }
 
 function nextClarifyingQuestion(field: string): string {
@@ -101,7 +101,12 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 ctx.itinerary! // Itinerary must exist if planGenerated is true
             );
 
-            ctx.itinerary = updated;
+
+            // STRICT NORMALIZATION GATE
+            const coreState = toCoreState(updated);
+            const normalizedState = strictNormalize(coreState);
+            ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary?.title || "Itinerary");
+
             saveSession(ctx);
 
             return {
@@ -316,71 +321,77 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
 
         if (intent.type === 'CONFIRM_GENERATE') {
-            ctx.currentState = 'PLANNING';
-            saveSession(ctx);
+            // 2. BUILD ITINERARY (if we have all fields)
+            if (allCollected) {
+                console.log("[Orchestrator] All constraints collected. Building itinerary...");
+                const result = await buildItinerary(
+                    // @ts-ignore
+                    ctx.collectedConstraints.interests,
+                    // @ts-ignore
+                    parseInt(ctx.collectedConstraints.days) || 3,
+                    // @ts-ignore
+                    ctx.collectedConstraints.pace || 'medium'
+                );
 
-            const pois = await searchPOIs(ctx.collectedConstraints.interests || [], []);
-            const itinerary = await buildItinerary(
-                pois,
-                Number(ctx.collectedConstraints.days) || 3,
-                ctx.collectedConstraints.pace || 'medium'
-            );
+                if (result.itinerary) {
+                    // STRICT NORMALIZATION GATE (PLAN)
+                    const coreState = toCoreState(result.itinerary);
+                    const normalizedState = strictNormalize(coreState);
+                    ctx.itinerary = toLegacyItinerary(normalizedState, result.itinerary.title);
 
-            ctx.itinerary = itinerary;
-            ctx.planGenerated = true;
+                    const pdf = await pdfService.generate(ctx.itinerary);
+                    ctx.lastPDFPath = pdf;
+
+                    return {
+                        message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
+                        itinerary: ctx.itinerary,
+                        session_id: ctx.sessionId
+                    };
+                }
+            }
+            return {
+                message: 'Tell me if you’d like me to generate the plan, or change something.',
+                currentState: 'CONFIRMING'
+            };
+        }
+
+        // -------------------
+        // EXPLANATION FLOW
+        // -------------------
+        // -------------------
+        // EXPLANATION FLOW
+        // -------------------
+        if (ctx.currentState === 'EXPLAINING') {
+            const rag = await getGroundedAnswer(userInput);
+
             ctx.currentState = 'READY';
             saveSession(ctx);
 
+            if (!rag || rag.sources.length === 0) {
+                return {
+                    message: 'I don’t yet have verified public data for this place.',
+                    currentState: 'READY'
+                };
+            }
+
             return {
-                message: 'Here is your Dubai itinerary.',
-                itinerary,
+                message: rag.answer,
+                sources: rag.sources,
+                citations: rag.sources,
                 currentState: 'READY'
             };
         }
 
-        return {
-            message: 'Tell me if you’d like me to generate the plan, or change something.',
-            currentState: 'CONFIRMING'
-        };
-    }
-
-    // -------------------
-    // EXPLANATION FLOW
-    // -------------------
-    // -------------------
-    // EXPLANATION FLOW
-    // -------------------
-    if (ctx.currentState === 'EXPLAINING') {
-        const rag = await getGroundedAnswer(userInput);
-
-        ctx.currentState = 'READY';
         saveSession(ctx);
+        console.log(
+            '[STATE END]',
+            ctx.currentState,
+            'PLAN:', ctx.planGenerated
+        );
 
-        if (!rag || rag.sources.length === 0) {
-            return {
-                message: 'I don’t yet have verified public data for this place.',
-                currentState: 'READY'
-            };
-        }
-
+        // Fallback
         return {
-            message: rag.answer,
-            sources: rag.sources,
-            citations: rag.sources,
-            currentState: 'READY'
+            message: 'Tell me how you’d like to continue.',
+            currentState: ctx.currentState,
         };
     }
-
-    saveSession(ctx);
-    console.log(
-        '[STATE END]',
-        ctx.currentState,
-        'PLAN:', ctx.planGenerated
-    );
-
-    // Fallback
-    return {
-        message: 'Tell me how you’d like to continue.',
-        currentState: ctx.currentState,
-    };
-}
