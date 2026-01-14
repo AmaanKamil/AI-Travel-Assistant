@@ -102,6 +102,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             );
 
             ctx.itinerary = updated;
+            saveSession(ctx);
 
             return {
                 message: 'I’ve updated your itinerary.',

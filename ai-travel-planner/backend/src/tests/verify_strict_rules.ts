@@ -50,18 +50,34 @@ import { buildItinerary } from '../services/itineraryBuilderMCP';
 console.log("\n[Test 2] Restaurant Schema");
 
 async function testBuilder() {
-    const it = await buildItinerary([{ id: '1', name: 'Test', match: true, location: { lat: 25, lng: 55, zone: 'Downtown' }, category: 'Mall' }], 1);
+    const it = await buildItinerary([
+        { id: '1', name: 'Start', match: true, location: { lat: 25, lng: 55, zone: 'Downtown' }, category: 'Mall' },
+        { id: '2', name: 'End', match: true, location: { lat: 25.01, lng: 55.01, zone: 'Downtown' }, category: 'Mall' }
+    ], 1);
     const lunch = it.days[0].blocks.find(b => b.type === 'lunch');
 
     // Expect: "Lunch at Name"
-    // Expect Desc: "Cuisine, Zone"
+    // Expect Desc: "Cuisine • Zone"
     console.log("Lunch:", lunch?.activity);
     console.log("Desc:", lunch?.description);
 
-    if (lunch?.description?.includes(',')) {
-        console.log("PASS: Restaurant description has comma (Cuisine, Area)");
+    if (lunch?.description?.includes('•')) {
+        console.log("PASS: Restaurant description has bullet (Cuisine • Area)");
     } else {
-        console.error("FAIL: Restaurant description missing schema");
+        console.error("FAIL: Restaurant description missing schema separator");
+    }
+
+    // Check Travel Time
+    const activity = it.days[0].blocks.find(b => b.description?.includes('mins ('));
+    if (activity) {
+        console.log("Travel String:", activity.description);
+        if (activity.description?.includes('10-15 mins') || activity.description?.includes('20-30 mins') || activity.description?.includes('35-50 mins')) {
+            console.log("PASS: Travel time uses strict buckets.");
+        } else {
+            console.error("FAIL: Travel time format invalid.");
+        }
+    } else {
+        console.warn("WARN: No travel leg found to test.");
     }
 }
 

@@ -1,5 +1,6 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
 import { EditIntent } from '../types/intent';
+import { validateAndNormalizeItinerary } from '../utils/itineraryValidator';
 
 // Helper to identify "Iconic" POIs
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
@@ -74,9 +75,13 @@ const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
 
     const dist = haversineDistance(prevLoc.lat, prevLoc.lng, currLoc.lat, currLoc.lng);
 
-    if (dist < 2) return "10-20 mins (Same Area)";
-    if (dist < 10) return "25-40 mins (Nearby)";
-    return "45-60 mins (Travel)";
+    // Strict buckets per requirements
+    // Same area (< 3km) -> 10 to 15 mins
+    if (dist < 3) return "10-15 mins";
+    // Nearby areas (< 10km) -> 20 to 30 mins
+    if (dist < 10) return "20-30 mins";
+    // Far areas (>= 10km) -> 35 to 50 mins
+    return "35-50 mins";
 };
 
 const getDuration = (category: string, name: string): string => {
@@ -140,7 +145,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
 
                 // Format: Name \n Cuisine, Zone
                 const activityName = `${slot.type === 'lunch' ? 'Lunch' : 'Dinner'} at ${restaurant.name}`;
-                const description = `${restaurant.cuisine}, ${restaurant.area}`;
+                const description = `${restaurant.cuisine} • ${restaurant.area}`;
 
                 dailyBlocks.push({
                     time: slot.time,
@@ -186,10 +191,10 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         plans.push({ day: i, blocks: dailyBlocks });
     }
 
-    return {
+    return validateAndNormalizeItinerary({
         title: `Your ${days}-Day Dubai Adventure (${pace})`,
         days: plans
-    };
+    });
 }
 
 export async function buildItineraryEdit(original: Itinerary, intent: EditIntent): Promise<Itinerary> {

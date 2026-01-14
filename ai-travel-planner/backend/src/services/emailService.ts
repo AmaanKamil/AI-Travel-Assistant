@@ -2,6 +2,10 @@ import nodemailer from 'nodemailer';
 
 export const emailService = {
     send: async (to: string, attachmentPath: string): Promise<{ success: boolean; message: string }> => {
+        if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            console.error("[Email] Missing SMTP Configuration");
+            return { success: false, message: "Server email configuration incomplete." };
+        }
         try {
             const transporter = nodemailer.createTransport({
                 host: process.env.SMTP_HOST,
