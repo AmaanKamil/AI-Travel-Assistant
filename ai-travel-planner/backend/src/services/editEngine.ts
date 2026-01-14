@@ -5,10 +5,12 @@ export type EditIntent = {
     change: 'relax' | 'swap_activity' | 'add_place' | 'move_activity' | 'replace_activity' | 'other';
     day: number; // Source Day
     target_day?: number | null; // Destination Day (for move/swap)
+
     change_type?: string;
     target_block?: 'morning' | 'afternoon' | 'evening' | null;
     raw_instruction?: string;
-    new_activity?: string; // For replace/add
+    new_activity?: string;
+    itemId?: string; // IF UI sends ID
 };
 
 export function applyDeterministicEdit(
@@ -16,130 +18,63 @@ export function applyDeterministicEdit(
     intent: EditIntent
 ): Itinerary {
     const copy: Itinerary = JSON.parse(JSON.stringify(itinerary));
-    const sourceDayIdx = intent.day - 1;
-    // Default target day to source day if not specified. Validate bounds.
-    let targetDayIdx = (intent.target_day || intent.day) - 1;
-
-    if (sourceDayIdx < 0 || sourceDayIdx >= copy.days.length) return copy;
-    if (targetDayIdx < 0 || targetDayIdx >= copy.days.length) targetDayIdx = sourceDayIdx;
-
-    const sourceDay = copy.days[sourceDayIdx];
-    const targetDay = copy.days[targetDayIdx];
-
     const operation = (intent.change_type || intent.change) as string;
 
-    // --- 1. MOVE ACTIVITY ---
+    // --- 1. MOVE ACTIVITY (Strict ID based or Heuristic) ---
     if (operation === 'move_activity') {
-        // Find activity to move (heuristic: not meal, matches target_block or last activity)
-        const blockIndex = sourceDay.blocks.findIndex(b =>
-            !b.fixed &&
-            (!intent.target_block || b.time.toLowerCase().includes(intent.target_block))
-        );
+        const sourceDayIdx = intent.day - 1;
+        const targetDayIdx = (intent.target_day || intent.day) - 1;
 
-        if (blockIndex !== -1) {
-            // DETACH
-            const [movedBlock] = sourceDay.blocks.splice(blockIndex, 1);
+        if (copy.days[sourceDayIdx] && copy.days[targetDayIdx]) {
+            const sourceDay = copy.days[sourceDayIdx];
+            const targetDay = copy.days[targetDayIdx];
+            const targetSlot = intent.target_block || 'afternoon'; // Default target slot
 
-            // AUTO-CORRECT TIME LABEL BASED ON DESTINATION CONTEXT?
-            // If we are appending to the end, it's likely Evening.
-            // If we are inserting before Lunch, it's Morning.
-            // This is "self-healing" logic.
-            const hasLunch = targetDay.blocks.some(b => b.type === 'lunch');
-            const hasDinner = targetDay.blocks.some(b => b.type === 'dinner');
+            // FIND ITEM
+            // Prefer ID if we had it, but currently intent might not have it.
+            // Fallback to slot match or first non-fixed activity.
+            const blockIndex = sourceDay.blocks.findIndex(b =>
+                !b.fixed &&
+                (!intent.target_block || b.slot === intent.target_block || b.time.toLowerCase().includes(intent.target_block || ''))
+            );
 
-            // Simple Heuristic for now: Update label to "Moved Activity" or keep original if valid?
-            // Better: validator will strip invalid labels, so let's try to set a neutral one or guess.
-            // If strict slots are Morning/Afternoon, let's look at where we put it.
+            if (blockIndex !== -1) {
+                // DETACH
+                const [movedBlock] = sourceDay.blocks.splice(blockIndex, 1);
 
-            // RE-ATTACH
-            // Strategy: Insert before Dinner if exists.
-            const dinnerIdx = targetDay.blocks.findIndex(b => b.type === 'dinner');
+                // TRANSFORM STATE (Crucial Step: Update internal state)
+                movedBlock.slot = targetSlot; // Assign new slot
+                movedBlock.description = (movedBlock.description || '') + ` [Moved]`;
 
-            if (dinnerIdx !== -1) {
-                targetDay.blocks.splice(dinnerIdx, 0, movedBlock);
-                // If it was Morning and now looks like Afternoon (post-lunch), update it.
-                if (hasLunch && movedBlock.time.includes('Morning')) {
-                    movedBlock.time = 'Afternoon';
-                }
-            } else {
+                // INSERT (Append to day for now, Validator will sort it)
                 targetDay.blocks.push(movedBlock);
-                movedBlock.time = 'Evening'; // Assumed if post-dinner or no dinner
             }
-
-            movedBlock.description += ` [Moved from Day ${intent.day}]`;
         }
     }
 
-    // --- 2. SWAP ITEMS ---
-    else if (operation === 'swap_activity') {
-        // Find blocks to swap (e.g. Evening Day 1 <-> Evening Day 2)
-        // Default to Evening if not specified, or Afternoon
-        const timeSlot = intent.target_block || 'afternoon';
+    // --- 2. RELAX DAY ---
+    else if (operation === 'relax') {
+        const sourceDay = copy.days[intent.day - 1];
+        if (sourceDay) {
+            // Remove first non-meal activity
+            const idx = sourceDay.blocks.findIndex(b => b.type === 'activity');
+            if (idx !== -1) sourceDay.blocks.splice(idx, 1);
 
-        const sourceBlock = sourceDay.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
-        const targetBlock = targetDay?.blocks.find(b => b.time.toLowerCase().includes(timeSlot) && !b.fixed);
-
-        if (sourceBlock && targetBlock) {
-            // Swap contents but keep times/metadata (pure content swap)
-            const tempActivity = sourceBlock.activity;
-            const tempDesc = sourceBlock.description;
-            const tempDur = sourceBlock.duration;
-
-            sourceBlock.activity = targetBlock.activity;
-            sourceBlock.description = targetBlock.description;
-            sourceBlock.duration = targetBlock.duration;
-
-            targetBlock.activity = tempActivity;
-            targetBlock.description = tempDesc;
-            targetBlock.duration = tempDur;
-        }
-    }
-
-    // --- 3. RELAX DAY ---
-    else if (operation === 'relax' || operation === 'make_more_relaxed') {
-        const activityIdx = sourceDay.blocks.findIndex(b => !b.fixed && (b.type === 'activity' || !b.type));
-
-        if (activityIdx !== -1) {
-            sourceDay.blocks.splice(activityIdx, 1); // Remove
-
-            // Inspect slot to see if we need a filler
-            // If we removed the ONLY activity, the day might be empty between meals.
-            sourceDay.blocks.splice(activityIdx, 0, {
-                time: 'Relaxation',
-                activity: 'Leisure & Hotel Rest',
-                duration: '2 hours',
-                description: 'Time to recharge.',
+            // Add Rest
+            sourceDay.blocks.push({
+                id: `rest-${Math.random()}`,
+                time: 'Afternoon',
+                slot: 'afternoon',
                 type: 'other',
+                activity: 'Relaxation Time',
+                duration: '2 hours',
+                description: 'Leisure time at hotel.',
                 fixed: false
             });
         }
     }
 
-    // --- 4. REPLACE ACTIVITY ---
-    else if (operation === 'replace_activity' || operation === 'other') {
-        const block = sourceDay.blocks.find(b =>
-            !b.fixed && (!intent.target_block || b.time.toLowerCase().includes(intent.target_block))
-        );
-
-        if (block) {
-            block.activity = intent.new_activity || "Indoor Activity (Center for Cultural Understanding)";
-            block.description = "Replaced based on request. Great indoor option.";
-            block.duration = "2 hours";
-        }
-    }
-
-    // --- 5. PACKED ---
-    else if (operation === 'add_place') {
-        sourceDay.blocks.push({
-            time: 'Late Night',
-            activity: 'Dessert or Late Night Stroll',
-            duration: '45 mins',
-            description: 'Wrap up the day with a quick visit nearby.',
-            type: 'activity',
-            fixed: false
-        });
-    }
-
-    // FINAL PASS: VALIDATOR
+    // FINAL PASS: MANDATORY VALIDATOR
+    // This will sort the days, fix slot times, remove illegal meals, etc.
     return validateAndNormalizeItinerary(copy);
 }

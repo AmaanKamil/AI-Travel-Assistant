@@ -1,17 +1,11 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
 
-// STRICT RULES
-const RULES = {
-    MORNING: { allow_lunch: false, allow_dinner: false },
-    AFTERNOON: { allow_lunch: true, allow_dinner: false },
-    EVENING: { allow_lunch: false, allow_dinner: true },
-    LATE_NIGHT: { allow_lunch: false, allow_dinner: true }
-};
-
 export function validateAndNormalizeItinerary(itinerary: Itinerary): Itinerary {
     const copy = JSON.parse(JSON.stringify(itinerary));
 
     copy.days.forEach((day: DayPlan) => {
+        // We assume blocks might be flat or already sorted. 
+        // We process them all together.
         day.blocks = normalizeDayBlocks(day.blocks);
     });
 
@@ -19,68 +13,87 @@ export function validateAndNormalizeItinerary(itinerary: Itinerary): Itinerary {
 }
 
 function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
-    const validBlocks: TimeBlock[] = [];
-    const mealsFound = { lunch: false, dinner: false };
+    let valid: TimeBlock[] = [...blocks];
 
-    // 1. Sort blocks by approximate time (heuristic)
-    // Morning -> Lunch -> Afternoon -> Dinner -> Evening
-    // This is hard to do perfectly with strings, so we rely on the order passed in,
-    // but we enforce the LABELS and CONTENT match.
+    // --- STEP 1: TYPE ENFORCEMENT & TAGGING ---
+    // Ensure all meals are typed correctly before we check slots
+    valid.forEach(b => {
+        const titleValues = b.activity.toLowerCase();
 
-    for (const block of blocks) {
-        const timeLower = block.time.toLowerCase();
-        let isValid = true;
-
-        // CHECK CONTAMINATION
-        if (timeLower.includes('morning')) {
-            if (isMeal(block, 'lunch') || isMeal(block, 'dinner')) isValid = false;
-        }
-        else if (timeLower.includes('afternoon')) {
-            if (isMeal(block, 'dinner')) isValid = false;
-        }
-        else if (timeLower.includes('evening') && !timeLower.includes('late')) {
-            if (isMeal(block, 'lunch')) isValid = false;
-        }
-
-        // DE-DUPLICATION (Only 1 fixed lunch/dinner per day)
-        if (block.type === 'lunch') {
-            if (mealsFound.lunch) isValid = false;
-            else mealsFound.lunch = true;
-        }
-        if (block.type === 'dinner') {
-            if (mealsFound.dinner) isValid = false;
-            else mealsFound.dinner = true;
-        }
-
-        // RECOVERY STRATEGY
-        // If we found a "Dinner" in "Morning", can we save it?
-        // Realistically, for this edit engine, if we moved it there, we probably wanted to *change* its time.
-        // So we should Update the TIME label to match the TYPE if it's a fixed meal.
-        if (!isValid && (block.type === 'lunch' || block.type === 'dinner')) {
-            // It's a meal in the wrong spot. Let's fix the slot time instead of deleting it.
-            if (block.type === 'lunch') {
-                block.time = '12:30 PM';
-                isValid = true;
-            }
-            if (block.type === 'dinner') {
-                block.time = '07:00 PM';
-                isValid = true;
+        // 3. Type Enforcement
+        if (titleValues.includes('lunch') || titleValues.includes('dinner') || titleValues.includes('breakfast')) {
+            if (b.type !== 'meal') {
+                b.type = 'meal'; // Force type
+                // Guess mealType if missing
+                if (!b.mealType) {
+                    if (titleValues.includes('lunch')) b.mealType = 'lunch';
+                    else if (titleValues.includes('dinner')) b.mealType = 'dinner';
+                    else if (titleValues.includes('breakfast')) b.mealType = 'breakfast';
+                }
             }
         }
 
-        if (isValid) {
-            validBlocks.push(block);
+        // Remove "Sightseeing" category from meals (Mapped via description or category field implied)
+        // In our data, 'category' is often in description or implicitly handled. 
+        // We ensure type='meal' is the primary flag.
+    });
+
+    // --- STEP 2: SLOT REASSIGNMENT ---
+    // Move items to their correct slots
+    valid.forEach(b => {
+        if (!b.mealType) return;
+
+        if (b.mealType === 'dinner' && b.slot !== 'evening') {
+            b.slot = 'evening';
+            b.time = '07:00 PM'; // Enforce display time
         }
+        if (b.mealType === 'lunch' && b.slot !== 'afternoon') {
+            b.slot = 'afternoon';
+            b.time = '12:30 PM';
+        }
+        if (b.mealType === 'breakfast' && b.slot !== 'morning') {
+            b.slot = 'morning';
+            b.time = '09:00 AM';
+        }
+    });
+
+    // --- STEP 3: SLOT SANITY (Remove illegal items) ---
+    valid = valid.filter(b => {
+        if (!b.slot) return true; // Safety
+
+        if (b.slot === 'morning') {
+            // Remove lunch/dinner
+            if (b.mealType === 'lunch' || b.mealType === 'dinner') return false;
+        }
+        if (b.slot === 'afternoon') {
+            // Remove dinner (Lunch allowed)
+            if (b.mealType === 'dinner') return false;
+        }
+        if (b.slot === 'evening') {
+            // Remove lunch (Dinner allowed)
+            if (b.mealType === 'lunch') return false;
+        }
+        return true;
+    });
+
+    // --- STEP 4: MEAL UNIQUENESS ---
+    // Keep earliest lunch/dinner
+    const found = { lunch: false, dinner: false, breakfast: false };
+    const uniqueBlocks: TimeBlock[] = [];
+
+    // Sort to ensure "Earliest" means something? 
+    // We trust input order usually, or we can sort by Slot.
+    // Let's sort by Slot Order: Morning -> Afternoon -> Evening
+    const slotOrder = { 'morning': 1, 'afternoon': 2, 'evening': 3 };
+    valid.sort((a, b) => (slotOrder[a.slot] || 99) - (slotOrder[b.slot] || 99));
+
+    for (const b of valid) {
+        if (b.type === 'meal' && b.mealType) {
+            if (found[b.mealType]) continue; // Drop duplicate
+            found[b.mealType] = true;
+        }
+        uniqueBlocks.push(b);
     }
 
-    // 2. Re-sort to ensure Fixed Meals are in correct visual order if we messed them up?
-    // For now, simpler is better. Just filtering.
-
-    return validBlocks;
-}
-
-function isMeal(block: TimeBlock, type: 'lunch' | 'dinner'): boolean {
-    if (block.type === type) return true;
-    if (block.activity.toLowerCase().includes(type)) return true;
-    return false;
+    return uniqueBlocks;
 }

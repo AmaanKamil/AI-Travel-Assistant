@@ -20,8 +20,8 @@ async function runTests() {
 
     // Check Day 1 Slots
     const day1 = itinerary.days[0];
-    const lunch = day1.blocks.find(b => b.type === 'lunch');
-    const dinner = day1.blocks.find(b => b.type === 'dinner');
+    const lunch = day1.blocks.find(b => b.mealType === 'lunch');
+    const dinner = day1.blocks.find(b => b.mealType === 'dinner');
 
     if (!lunch || !lunch.fixed || lunch.duration !== '45 mins') throw new Error("Lunch slot invalid");
     if (!dinner || !dinner.fixed || dinner.duration !== '45 mins') throw new Error("Dinner slot invalid");

@@ -148,11 +148,15 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 const description = `${restaurant.cuisine} • ${restaurant.area}`;
 
                 dailyBlocks.push({
+                    id: `block-${Math.random().toString(36).substr(2, 9)}`,
                     time: slot.time,
+                    slot: slot.time.includes('12:') || slot.time.toLowerCase().includes('afternoon') ? 'afternoon' :
+                        slot.time.toLowerCase().includes('morning') ? 'morning' : 'evening',
                     activity: activityName,
                     duration: slot.duration!,
                     description: description,
-                    type: slot.type as any,
+                    type: 'meal',
+                    mealType: slot.type as 'lunch' | 'dinner',
                     fixed: true
                 });
                 continue;
@@ -172,7 +176,10 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                     const travel = estimateTravelTime(lastLocation, selectedPOI.location);
 
                     dailyBlocks.push({
+                        id: `block-${Math.random().toString(36).substr(2, 9)}`,
                         time: slot.time,
+                        slot: slot.time.toLowerCase().includes('morning') ? 'morning' :
+                            slot.time.toLowerCase().includes('afternoon') ? 'afternoon' : 'evening',
                         activity: `Visit ${selectedPOI.name}`,
                         duration: duration,
                         description: `Explore ${selectedPOI.category}. Travel: ${travel}.`,

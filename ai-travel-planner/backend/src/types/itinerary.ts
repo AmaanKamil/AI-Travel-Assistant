@@ -8,12 +8,20 @@ export interface DayPlan {
     blocks: TimeBlock[];
 }
 
+// STRICT SCHEMA
 export interface TimeBlock {
-    time: string;
-    activity: string;
-    duration: string; // Made required to match usage
+    id: string;
+    time: string; // Keep for UI display (e.g. "09:00 AM")
+    slot: 'morning' | 'afternoon' | 'evening';
+    type: 'activity' | 'meal' | 'transfer' | 'other';
+    mealType?: 'lunch' | 'dinner' | 'breakfast';
+    activity: string; // Mapped to 'title'
+    location?: string;
+    cuisine?: string;
+    duration: string; // Display string
+    visitDurationMins?: number;
+    travelDurationMins?: number;
     description?: string;
     isFlexible?: boolean;
-    type?: 'activity' | 'lunch' | 'dinner' | 'transfer' | 'other';
     fixed?: boolean;
 }
