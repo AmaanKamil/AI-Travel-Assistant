@@ -1,7 +1,7 @@
-import { saveSession, loadSession } from '../utils/sessionManager';
-import { toCoreState, normalizeItinerary as strictNormalize, toLegacyItinerary } from '../core/adapter';
+import { saveSession, getSession, createNewSession, SessionContext } from './sessionContext';
+import { toCoreState, toLegacyItinerary } from '../core/adapter';
+import { normalizeItinerary as strictNormalize } from '../core/itineraryNormalizer';
 import { Itinerary } from '../types/itinerary';
-import { getSession, createNewSession, SessionContext } from './sessionContext';
 import { extractIntent } from '../services/llmService';
 import { searchPOIs } from '../services/poiSearchMCP';
 import { buildItinerary } from '../services/itineraryBuilderMCP';
@@ -14,9 +14,12 @@ import { pdfService } from '../services/pdfService';
 import { emailService } from '../services/emailService';
 
 const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
-if (!(ctx.collectedConstraints as any)[f]) return f;
+
+function getMissingField(ctx: SessionContext): string | null {
+    for (const f of REQUIRED_FIELDS) {
+        if (!(ctx.collectedConstraints as any)[f]) return f;
     }
-return null;
+    return null;
 }
 
 function nextClarifyingQuestion(field: string): string {
@@ -321,10 +324,10 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
 
         if (intent.type === 'CONFIRM_GENERATE') {
-            // 2. BUILD ITINERARY (if we have all fields)
-            if (allCollected) {
+            const missing = getMissingField(ctx);
+            if (!missing) {
                 console.log("[Orchestrator] All constraints collected. Building itinerary...");
-                const result = await buildItinerary(
+                const itinerary = await buildItinerary(
                     // @ts-ignore
                     ctx.collectedConstraints.interests,
                     // @ts-ignore
@@ -333,65 +336,68 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                     ctx.collectedConstraints.pace || 'medium'
                 );
 
-                if (result.itinerary) {
+                if (itinerary) {
                     // STRICT NORMALIZATION GATE (PLAN)
-                    const coreState = toCoreState(result.itinerary);
+                    const coreState = toCoreState(itinerary);
                     const normalizedState = strictNormalize(coreState);
-                    ctx.itinerary = toLegacyItinerary(normalizedState, result.itinerary.title);
+                    ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
 
                     const pdf = await pdfService.generate(ctx.itinerary);
-                    ctx.lastPDFPath = pdf;
+                    (ctx as any).lastPDFPath = pdf; // cast if property missing
+                    ctx.planGenerated = true;
+                    ctx.currentState = 'READY';
+                    saveSession(ctx);
 
                     return {
                         message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
                         itinerary: ctx.itinerary,
-                        session_id: ctx.sessionId
+                        session_id: ctx.sessionId,
+                        currentState: 'READY'
                     };
                 }
             }
-            return {
-                message: 'Tell me if you’d like me to generate the plan, or change something.',
-                currentState: 'CONFIRMING'
-            };
         }
 
-        // -------------------
-        // EXPLANATION FLOW
-        // -------------------
-        // -------------------
-        // EXPLANATION FLOW
-        // -------------------
-        if (ctx.currentState === 'EXPLAINING') {
-            const rag = await getGroundedAnswer(userInput);
+        return {
+            message: 'Tell me if you’d like me to generate the plan, or change something.',
+            currentState: 'CONFIRMING'
+        };
+    }
 
-            ctx.currentState = 'READY';
-            saveSession(ctx);
+    // -------------------
+    // EXPLANATION FLOW
+    // -------------------
+    if (ctx.currentState === 'EXPLAINING') {
+        const rag = await getGroundedAnswer(userInput);
 
-            if (!rag || rag.sources.length === 0) {
-                return {
-                    message: 'I don’t yet have verified public data for this place.',
-                    currentState: 'READY'
-                };
-            }
+        ctx.currentState = 'READY';
+        saveSession(ctx);
 
+        if (!rag || rag.sources.length === 0) {
             return {
-                message: rag.answer,
-                sources: rag.sources,
-                citations: rag.sources,
+                message: 'I don’t yet have verified public data for this place.',
                 currentState: 'READY'
             };
         }
 
-        saveSession(ctx);
-        console.log(
-            '[STATE END]',
-            ctx.currentState,
-            'PLAN:', ctx.planGenerated
-        );
-
-        // Fallback
         return {
-            message: 'Tell me how you’d like to continue.',
-            currentState: ctx.currentState,
+            message: rag.answer,
+            sources: rag.sources,
+            citations: rag.sources,
+            currentState: 'READY'
         };
     }
+
+    saveSession(ctx);
+    console.log(
+        '[STATE END]',
+        ctx.currentState,
+        'PLAN:', ctx.planGenerated
+    );
+
+    // Fallback
+    return {
+        message: 'Tell me how you’d like to continue.',
+        currentState: ctx.currentState,
+    };
+}
