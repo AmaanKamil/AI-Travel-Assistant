@@ -53,35 +53,40 @@ router.post('/send-itinerary-email', async (req, res) => {
 
     // STEP 1: Strict Validation
     if (!email || typeof email !== 'string' || !email.includes('@')) {
-        res.status(400).json({ success: false, message: "Please provide a valid email address." });
-        return;
+        return res.status(400).json({ success: false, message: "Please provide a valid email address." });
     }
     if (!itinerary || !itinerary.days || itinerary.days.length === 0) {
-        res.status(400).json({ success: false, message: "Invalid itinerary data. Itinerary must have at least one day.", error: "ITINERARY_MISSING" });
-        return;
+        return res.status(400).json({ success: false, message: "Invalid itinerary data. Itinerary must have at least one day.", error: "ITINERARY_MISSING" });
     }
 
-    // STEP 2: Respond Early (Async Flow)
-    res.json({ success: true, status: "QUEUED" });
+    try {
+        console.log(`[API] Processing email delivery for ${email}`);
 
-    // STEP 3: Async Execution (Detached Promise with background wait)
-    setImmediate(async () => {
-        try {
-            console.log(`[ASYNC_JOB] Processing email for ${email}`);
-            const pdfPath = await generatePDF(itinerary);
+        // Step 2: Generate PDF
+        console.log(`[API] Generating PDF...`);
+        const pdfPath = await generatePDF(itinerary);
+        console.log(`[API] PDF generated at ${pdfPath}`);
 
-            // emailService.send handles provider check and logging internally
-            const emailResult = await emailService.send(email, pdfPath);
+        // Step 3: Await and validate sendMail response (No fake success)
+        console.log(`[API] Sending email via Nodemailer...`);
+        const emailResult = await emailService.send(email, pdfPath);
 
-            if (emailResult.success) {
-                console.log(`[ASYNC_JOB] SUCCESS: Email delivered to ${email}`);
-            } else {
-                console.error(`[ASYNC_JOB] FAILURE: ${emailResult.message} to ${email}`);
-            }
-        } catch (err: any) {
-            console.error(`[ASYNC_JOB] CRITICAL ERROR for ${email}:`, err.message);
+        if (emailResult.success) {
+            console.log(`[API] SUCCESS: Email accepted by Gmail for ${email}`);
+            return res.json({ success: true });
+        } else {
+            console.error(`[API] FAILURE: ${emailResult.message} for ${email}`);
+            // Use 502 for provider failure
+            return res.status(502).json({
+                success: false,
+                error: emailResult.message
+            });
         }
-    });
+    } catch (err: any) {
+        console.error(`[API] CRITICAL ERROR during email flow:`, err.message);
+        console.error(err.stack);
+        return res.status(500).json({ success: false, error: "INTERNAL_SERVER_ERROR", details: err.message });
+    }
 });
 
 export default router;
