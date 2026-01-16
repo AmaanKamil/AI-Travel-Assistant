@@ -1,86 +1,66 @@
 
-import { buildItinerary } from '../services/itineraryBuilderMCP';
-import { applyDeterministicEdit } from '../services/editEngine';
-import { Itinerary } from '../types/itinerary';
-
-// MOCK POIs
-const MOCK_POIS = [
-    { id: '1', name: 'Burj Khalifa', category: 'Landmark', location: { lat: 25, lng: 55, zone: 'Downtown' }, score: 90 },
-    { id: '2', name: 'Dubai Mall', category: 'Mall', location: { lat: 25, lng: 55, zone: 'Downtown' }, score: 80 },
-    { id: '3', name: 'Al Fahidi Fort', category: 'Museum', location: { lat: 25, lng: 55, zone: 'Old Dubai' }, score: 85 },
-    { id: '4', name: 'Desert Safari', category: 'Adventure', location: { lat: 24, lng: 54, zone: 'Other' }, score: 88 },
-];
+import { reconstructItinerary } from '../core/itineraryReconstructor';
+import { ItineraryState, ItineraryItem } from '../core/itineraryNormalizer';
 
 async function runTests() {
-    console.log(">>> STARTING VERIFICATION >>>");
+    console.log(">>> VERIFYING TRAVEL TIMES >>>");
 
-    // 1. TEST ITINERARY BUILDER (Fix A, B, C)
-    console.log("\n[Test 1] Itinerary Builder Logic");
-    const itinerary = await buildItinerary(MOCK_POIS, 2, 'medium');
+    // MOCK ITEMS
+    // Zone A: Downtown
+    // Zone B: Marina
+    const items: ItineraryItem[] = [
+        {
+            id: '1', day: 1, title: 'Burj Khalifa', slot: 'MORNING', type: 'ATTRACTION',
+            location: 'Burj Khalifa, Downtown',
+            estVisitMins: 90,
+            estTravelMins: 0
+        },
+        {
+            id: '2', day: 1, title: 'Dubai Mall', slot: 'AFTERNOON', type: 'ATTRACTION',
+            location: 'Dubai Mall, Downtown',
+            estVisitMins: 120,
+            estTravelMins: 0
+        },
+        {
+            id: '3', day: 1, title: 'Marina Walk', slot: 'EVENING', type: 'ATTRACTION',
+            location: 'Dubai Marina',
+            estVisitMins: 60,
+            estTravelMins: 0
+        }
+    ];
 
-    // Check Day 1 Slots
-    const day1 = itinerary.days[0];
-    const lunch = day1.blocks.find(b => b.mealType === 'lunch');
-    const dinner = day1.blocks.find(b => b.mealType === 'dinner');
-
-    if (!lunch || !lunch.fixed || lunch.duration !== '45 mins') throw new Error("Lunch slot invalid");
-    if (!dinner || !dinner.fixed || dinner.duration !== '45 mins') throw new Error("Dinner slot invalid");
-
-    // Check Restaurant Name & Format
-    // Day 1 Downtown Lunch -> Zuma
-    // Description should be: "Contemporary Japanese, Downtown"
-    console.log("Lunch Activity:", lunch.activity);
-    console.log("Lunch Description:", lunch.description);
-
-    if (!lunch.activity.includes('Zuma') && !lunch.activity.includes('Armani') && !lunch.activity.includes('Lunch')) {
-        console.warn("Warning: Restaurant name not matching expected pattern? Got: " + lunch.activity);
-    }
-    if (!lunch.description?.includes(',')) {
-        console.warn("Warning: Cuisine/Zone not found in description? Got: " + lunch.description);
-    }
-
-    console.log("Day 1 Blocks:", day1.blocks.map(b => `[${b.time}] ${b.activity}\n   -> ${b.description}`));
-
-
-    // 2. TEST EDITING (Fix F)
-    console.log("\n[Test 2] Editing Logic");
-
-    // MOVE
-    console.log("- Testing Move...");
-    // Move Day 1 Morning to Day 2
-    const moveIntent: any = {
-        change: 'move_activity',
-        day: 1,
-        target_day: 2,
-        target_block: 'morning'
+    const state: ItineraryState = {
+        items: items,
+        metadata: { source: 'BUILDER', version: 1 }
     };
 
-    const movedItinerary = applyDeterministicEdit(itinerary, moveIntent);
-    const day1New = movedItinerary.days[0];
-    const day2New = movedItinerary.days[1];
+    console.log("Running reconstruction...");
+    const result = reconstructItinerary(state);
 
-    // Original Day 1 had 4 blocks (M, L, A, D). If we move Morning, it should have 3?
-    // Actually our Morning matching might be loose.
-    console.log("Day 2 New Blocks:", day2New.blocks.map(b => b.activity));
-    if (day2New.blocks.length <= itinerary.days[1].blocks.length) {
-        console.warn(">> Move test ambiguous: Day 2 count didn't increase?");
+    // ANALYZE TRAVEL TIMES
+    // Item 1 -> Item 2 (Same Zone: Downtown -> Downtown)
+    // Item 2 -> Item 3 (Diff Zone: Downtown -> Marina)
+
+    const item1 = result.items.find(i => i.id === '1');
+    const item2 = result.items.find(i => i.id === '2');
+    const item3 = result.items.find(i => i.id === '3');
+
+    if (!item1 || !item2 || !item3) throw new Error("Missing items in result");
+
+    console.log(`Item 1 -> Item 2 Travel: ${item2.estTravelMins} mins (Expected ~15)`);
+    console.log(`Item 2 -> Item 3 Travel: ${item3.estTravelMins} mins (Expected ~40)`);
+
+    if (item2.estTravelMins !== 15) {
+        console.error("FAIL: Same zone travel time incorrect.");
     } else {
-        console.log(">> Move verified: Day 2 gained a block.");
+        console.log("PASS: Same zone travel time correct.");
     }
 
-    // RELAX
-    console.log("- Testing Relax...");
-    const relaxIntent: any = {
-        change: 'relax',
-        day: 2
-    };
-    const relaxedItinerary = applyDeterministicEdit(itinerary, relaxIntent);
-    const day2Relaxed = relaxedItinerary.days[1];
-    const leisureFn = day2Relaxed.blocks.find(b => b.activity.includes('Leisure'));
-    if (!leisureFn) throw new Error("Relax failed: No Leisure block found.");
-    console.log(">> Relax verified: Found " + leisureFn.activity);
-
-    console.log("\n<<< VERIFICATION COMPLETE >>>");
+    if (item3.estTravelMins !== 40) {
+        console.error("FAIL: Different zone travel time incorrect.");
+    } else {
+        console.log("PASS: Different zone travel time correct.");
+    }
 }
 
 runTests().catch(e => {

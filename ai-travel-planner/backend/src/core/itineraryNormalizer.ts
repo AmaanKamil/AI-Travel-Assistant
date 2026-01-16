@@ -21,6 +21,10 @@ export interface ItineraryItem {
 
 export interface ItineraryState {
     items: ItineraryItem[];
+    metadata?: {
+        source: 'BUILDER';
+        version: number;
+    };
 }
 
 const SLOT_RULES: Record<ItemType, Slot[]> = {

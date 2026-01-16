@@ -17,23 +17,25 @@ export const emailService = {
                 }
             });
 
-            await transporter.sendMail({
-                from: process.env.FROM_EMAIL,
+            const mailOptions = {
+                from: process.env.SMTP_USER,
                 to,
-                subject: 'Your Dubai Trip Itinerary',
-                text: 'Attached is your personalized Dubai travel plan.',
+                subject: 'Your Dubai Itinerary',
+                text: 'Here is the PDF itinerary you requested.',
                 attachments: [
                     {
-                        filename: 'Dubai-Trip-Plan.pdf',
+                        filename: 'itinerary.pdf',
                         path: attachmentPath
                     }
                 ]
-            });
+            };
 
+            const info = await transporter.sendMail(mailOptions);
+            console.log('[EMAIL] SUCCESS:', info.messageId);
             return { success: true, message: 'Email sent successfully!' };
-        } catch (err: any) {
-            console.error('Email send failed:', err);
-            return { success: false, message: err.message || 'Failed to send email.' };
+        } catch (error: any) {
+            console.error('[EMAIL] FAILED (Nodemailer):', error);
+            return { success: false, message: `Failed to send: ${error.message}` };
         }
     }
 };

@@ -94,7 +94,39 @@ export function reconstructItinerary(state: ItineraryState): ItineraryState {
         reconstructedItems.push(...eveningSlot);
     }
 
-    return { items: reconstructedItems };
+    // 3. RECALCULATE TRAVEL TIMES
+    // We do this after slotting is finalized to ensure sequential logic is correct
+    // (e.g. Morning 1 -> Morning 2 -> Lunch)
+    // We restart the loop or just process the flat list if it was sorted by day/slot?
+    // reconstructedItems is roughly sorted by Day loop, but let's be safe.
+    // The loop above pushed day by day, so it IS sorted by day.
+
+    // Simple linear scan for travel times
+    for (let i = 0; i < reconstructedItems.length - 1; i++) {
+        const current = reconstructedItems[i];
+        const next = reconstructedItems[i + 1];
+
+        if (current.day === next.day) {
+            // Same day travel
+            next.estTravelMins = estimateRealTravelTime(current, next);
+        } else {
+            // New day starts at 0 travel (assuming hotel start)
+            // Or we could set first item of day to "from hotel" time if we knew hotel location
+            // For now, first item travel is 0 or kept from original if sensible. 
+            // Reconstructor initialization:
+            // next.estTravelMins = 0; // handled by default or input
+        }
+    }
+
+    console.log(`[BUILDER] Reconstructed ${reconstructedItems.length} items.`);
+
+    return {
+        items: reconstructedItems,
+        metadata: {
+            source: 'BUILDER',
+            version: 1
+        }
+    };
 }
 
 function formatMealTitle(title: string, type: 'Lunch' | 'Dinner'): string {
@@ -104,4 +136,54 @@ function formatMealTitle(title: string, type: 'Lunch' | 'Dinner'): string {
         .replace(/^Visit /i, "")
         .trim();
     return `${type} at ${raw}`;
+}
+
+// REAL TRAVEL LOGIC
+function estimateRealTravelTime(from: ItineraryItem, to: ItineraryItem): number {
+    // If no location data, fallback
+    // We assume 'location' field or we parse it?? 
+    // The current Item interface has optional location.
+    // If missing, default to 20.
+
+    // MOCK MATRIX LOGIC (since we don't have lat/long here yet, unless added to Item)
+    // We'll use a heuristic on Title or specific Area field if valid.
+    // User mentioned "Same zone: 15, Nearby: 25, Far: 40".
+
+    // For now, let's just implement the buckets logic requested.
+    // Since we don't have "Area" on item explicitly in the interface (it's optional location string),
+    // we'll try to guess or use default "Nearby".
+
+    // IMPROVEMENT: If we had Area, we would use it.
+    // Let's assume location string implies area for now.
+
+    if (!from.location || !to.location) return 20;
+
+    const fromLoc = from.location.toLowerCase();
+    const toLoc = to.location.toLowerCase();
+
+    if (fromLoc === toLoc) return 10; // Same place?
+
+    // Simple keyword matching for zones
+    const zones = ['downtown', 'marina', 'jumeirah', 'palm', 'creek', 'deira'];
+    const fromZone = zones.find(z => fromLoc.includes(z));
+    const toZone = zones.find(z => toLoc.includes(z));
+
+    if (fromZone && toZone) {
+        if (fromZone === toZone) return 15; // Same zone
+        // Adjacent pairs (heuristic)
+        const nearbyPairs = [
+            ['downtown', 'jumeirah'],
+            ['marina', 'jumeirah'],
+            ['marina', 'palm'],
+            ['creek', 'deira'],
+            ['downtown', 'creek']
+        ];
+        const pair = [fromZone, toZone].sort().join('-');
+        const isNearby = nearbyPairs.some(p => p.sort().join('-') === pair);
+
+        if (isNearby) return 25;
+        return 40; // Far
+    }
+
+    return 25; // Default nearby
 }
