@@ -1,7 +1,7 @@
 
-import { buildItinerary } from '../services/itineraryBuilderMCP';
-import { reconstructItinerary } from '../core/itineraryReconstructor';
-import { toCoreState } from '../core/adapter';
+import { buildItinerary } from '../src/services/itineraryBuilderMCP';
+import { reconstructItinerary } from '../src/core/itineraryReconstructor';
+import { toCoreState } from '../src/core/adapter';
 
 async function runTests() {
     console.log(">>> VERIFYING SIMPLIFIED LINEAR FLOW >>>");

@@ -51,44 +51,37 @@ router.post('/edit-itinerary', async (req, res) => {
 router.post('/send-itinerary-email', async (req, res) => {
     const { email, itinerary } = req.body;
 
-    // 1. Validation
+    // STEP 1: Strict Validation
     if (!email || typeof email !== 'string' || !email.includes('@')) {
         res.status(400).json({ success: false, message: "Please provide a valid email address." });
         return;
     }
-    if (!itinerary) {
-        res.status(400).json({ success: false, message: "Missing itinerary data." });
+    if (!itinerary || !itinerary.days || itinerary.days.length === 0) {
+        res.status(400).json({ success: false, message: "Invalid itinerary data. Itinerary must have at least one day.", error: "ITINERARY_MISSING" });
         return;
     }
 
-    // 2. Safe Execution
-    try {
-        console.log(`[API] Sending PDF to ${email}`);
-        const pdfPath = await generatePDF(itinerary);
+    // STEP 2: Respond Early (Async Flow)
+    res.json({ success: true, status: "QUEUED" });
 
-        // emailService.send is already safe (returns object, doesn't throw)
-        const emailResult = await emailService.send(email, pdfPath);
+    // STEP 3: Async Execution (Detached Promise with background wait)
+    setImmediate(async () => {
+        try {
+            console.log(`[ASYNC_JOB] Processing email for ${email}`);
+            const pdfPath = await generatePDF(itinerary);
 
-        if (!emailResult.success) {
-            // Logged internally, return clean error to UI
-            // Return 200 with success:false to handle gracefully on client without axios throw?
-            // User requested "No silent failures", "Return structured error".
-            // Typically 400 or 500 is fine if body is structured. 
-            // Let's stick to 200 for "Handled Failure" or strict 500 with message.
-            // User requirement: "Return structured error... Never return empty 500".
-            return res.status(200).json({ success: false, message: emailResult.message });
+            // emailService.send handles provider check and logging internally
+            const emailResult = await emailService.send(email, pdfPath);
+
+            if (emailResult.success) {
+                console.log(`[ASYNC_JOB] SUCCESS: Email delivered to ${email}`);
+            } else {
+                console.error(`[ASYNC_JOB] FAILURE: ${emailResult.message} to ${email}`);
+            }
+        } catch (err: any) {
+            console.error(`[ASYNC_JOB] CRITICAL ERROR for ${email}:`, err.message);
         }
-
-        return res.json({ success: true, message: 'Your itinerary has been sent!' });
-
-    } catch (err: any) {
-        console.error("[API: Critical Email Error]", err);
-        // Fallback for unexpected crashe (like PDF generation fail)
-        return res.status(200).json({
-            success: false,
-            message: 'Could not generate PDF or send email. Please try again.'
-        });
-    }
+    });
 });
 
 export default router;

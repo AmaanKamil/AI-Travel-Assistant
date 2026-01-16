@@ -1,6 +1,6 @@
-import { validateAndNormalizeItinerary } from '../utils/itineraryValidator';
-import { Itinerary } from '../types/itinerary';
-import { buildItinerary } from '../services/itineraryBuilderMCP';
+import { validateAndNormalizeItinerary } from '../src/utils/itineraryValidator';
+import { Itinerary } from '../src/types/itinerary';
+import { buildItinerary } from '../src/services/itineraryBuilderMCP';
 
 console.log(">>> VERIFYING STRICT RULES >>>");
 

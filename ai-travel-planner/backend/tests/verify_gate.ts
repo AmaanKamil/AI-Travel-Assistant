@@ -1,5 +1,5 @@
-import { ItineraryGate } from '../core/itineraryGate';
-import { ItineraryState } from '../core/itineraryNormalizer';
+import { ItineraryGate } from '../src/core/itineraryGate';
+import { ItineraryState } from '../src/core/itineraryNormalizer';
 
 console.log(">>> VERIFYING GATEKEEPER >>>");
 

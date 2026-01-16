@@ -1,5 +1,5 @@
 
-import { buildItinerary } from '../services/itineraryBuilderMCP';
+import { buildItinerary } from '../src/services/itineraryBuilderMCP';
 
 async function runTests() {
     console.log(">>> VERIFYING FAMOUS PLACES SEEDING >>>");

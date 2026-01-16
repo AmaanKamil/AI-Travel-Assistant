@@ -1,5 +1,5 @@
-import { reconstructItinerary } from '../core/itineraryReconstructor';
-import { ItineraryState } from '../core/itineraryNormalizer';
+import { reconstructItinerary } from '../src/core/itineraryReconstructor';
+import { ItineraryState } from '../src/core/itineraryNormalizer';
 
 console.log(">>> VERIFYING STRICT RECONSTRUCTION >>>");
 

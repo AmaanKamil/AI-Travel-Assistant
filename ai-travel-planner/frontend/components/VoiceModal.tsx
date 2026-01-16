@@ -61,9 +61,9 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         const result = await exportItinerary(displayItinerary, email);
 
         if (result.success) {
-            setExportStatus("Email sent successfully!");
+            setExportStatus(result.status === "QUEUED" ? "Email is being sent. Check your inbox shortly." : "Email sent successfully!");
             setEmail("");
-            setTimeout(() => setExportStatus(null), 3000);
+            setTimeout(() => setExportStatus(null), 5000);
         } else {
             setExportStatus("Failed: " + result.message);
         }

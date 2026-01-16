@@ -1,6 +1,6 @@
 
-import { reconstructItinerary } from '../core/itineraryReconstructor';
-import { ItineraryState, ItineraryItem } from '../core/itineraryNormalizer';
+import { reconstructItinerary } from '../src/core/itineraryReconstructor';
+import { ItineraryState, ItineraryItem } from '../src/core/itineraryNormalizer';
 
 async function runTests() {
     console.log(">>> VERIFYING TRAVEL TIMES >>>");
