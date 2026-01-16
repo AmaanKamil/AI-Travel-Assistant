@@ -54,6 +54,31 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // Short-circuit for very obvious unrelated non-travel spam if needed,
     // but strict "Dubai" keyword check might be too aggressive for "yes"/"no" answers.
     // We will rely on the prompt to handle "Write me a poem" but we can block known jailbreaks or gibberish here.
+    // STRICT STATE GUARD (Email Flow)
+    if (ctx.currentState === 'AWAITING_EMAIL_INPUT') {
+        // If user says something unrelated, we should probably guide them back or ignore?
+        // Requirement: "Disable microphone input" - so we shouldn't even get valid speech here ideally.
+        // But if we do (e.g. typing or bypass), strictly block planning.
+        const text = userInput.toLowerCase();
+
+        // Allow escape hatch?
+        if (text.includes('cancel') || text.includes('stop')) {
+            ctx.currentState = 'READY';
+            saveSession(ctx);
+            return {
+                message: 'Cancelled. You can continue planning.',
+                currentState: 'READY'
+            };
+        }
+
+        return {
+            message: 'Please enter your email in the field below and click on the send button.',
+            currentState: 'AWAITING_EMAIL_INPUT',
+            // @ts-ignore
+            uiAction: 'REQUEST_EMAIL'
+        };
+    }
+
     if (userInput.length > 500) {
         return {
             message: 'That message is a bit too long. Could you summarize your request?',
@@ -127,7 +152,8 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             text.includes('email') ||
             text.includes('send') ||
             text.includes('pdf') ||
-            text.includes('share')
+            text.includes('share') ||
+            text.includes('mail')
         ) {
             console.log('→ Routing to EXPORT (UI Trigger)');
 
@@ -135,9 +161,12 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             // Do not send email here. 
             // Trigger UI mode only.
 
+            ctx.currentState = 'AWAITING_EMAIL_INPUT';
+            saveSession(ctx);
+
             return {
-                message: 'Please enter your email in the field below and click send.',
-                currentState: 'READY',
+                message: 'Please enter your email in the field below and click on the send button.',
+                currentState: 'AWAITING_EMAIL_INPUT',
                 // @ts-ignore - Dynamic property for UI
                 uiAction: 'REQUEST_EMAIL'
             };

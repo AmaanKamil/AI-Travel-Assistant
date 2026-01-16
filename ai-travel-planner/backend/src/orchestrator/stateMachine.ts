@@ -8,7 +8,9 @@ export type OrchestratorState =
     | 'EXPLAINING'
     | 'EXPORTING'
     | 'AMBIGUOUS'      // For when we don't know what to do (PARSING is internal, not a waiting state)
-    | 'ERROR';
+    | 'ERROR'
+    | 'AWAITING_EMAIL_INPUT'
+    | 'SENDING_EMAIL';
 
 export function getNextState(currentState: OrchestratorState, intentType: string): OrchestratorState {
     // This helper is for default "happy path" transitions.

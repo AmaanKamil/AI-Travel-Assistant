@@ -112,8 +112,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             }
 
             // UI ACTION: REQUEST_EMAIL
-            if (result.uiAction === 'REQUEST_EMAIL') {
+            if (result.uiAction === 'REQUEST_EMAIL' || result.currentState === 'AWAITING_EMAIL_INPUT') {
                 setIsListening(false); // Stop mic
+                // Force mic stop at system level
+                // (Already done by setIsListening(false), but let's be safe in UI rendering too)
+
                 setTimeout(() => {
                     scrollToBottom();
                     const emailInput = document.getElementById('email-input-field');
@@ -282,11 +285,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                     <div className="p-4 bg-gradient-to-t from-gray-950 to-transparent flex flex-col items-center gap-4">
                         <button
                             onClick={handleMicClick}
-                            disabled={isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email'))}
+                            disabled={isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email')) || messages.at(-1)?.role === 'assistant' && messages.at(-1)?.content.includes('email field below')}
                             className={`
                                 relative flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 shadow-xl
                                 ${isListening ? 'bg-red-500 scale-110 shadow-red-500/40 animate-pulse' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'}
-                                ${(isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email'))) ? 'opacity-50 cursor-not-allowed bg-gray-700' : ''}
+                                ${(isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email')) || messages.at(-1)?.role === 'assistant' && messages.at(-1)?.content.includes('email field below')) ? 'opacity-50 cursor-not-allowed bg-gray-700' : ''}
                             `}
                         >
                             {isProcessing ? <Loader2 className="w-6 h-6 animate-spin text-white" /> : <Mic className="w-6 h-6 text-white" />}
