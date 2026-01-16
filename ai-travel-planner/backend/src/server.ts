@@ -1,7 +1,4 @@
 import app from './app';
-// Force load mail config and verify SMTP on boot
-import './services/mailConfig';
-
 const PORT = process.env.PORT || 4000;
 
 // Production Environment Check
@@ -10,7 +7,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 console.log(`[Server] Starting in ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode...`);
 
 // Critical Environment Variable Validation
-const criticalVars = ['GROQ_API_KEY', 'EMAIL_USER', 'EMAIL_APP_PASSWORD'];
+const criticalVars = ['GROQ_API_KEY', 'GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN'];
 const missingVars = criticalVars.filter(v => !process.env[v]);
 
 if (missingVars.length > 0) {

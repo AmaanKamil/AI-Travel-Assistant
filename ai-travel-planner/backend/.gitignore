@@ -1,1 +1,7 @@
 chroma_db/
+node_modules/
+dist/
+tmp/
+.env
+.DS_Store
+coverage/
