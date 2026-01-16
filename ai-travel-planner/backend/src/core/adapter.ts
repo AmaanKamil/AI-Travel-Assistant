@@ -21,9 +21,8 @@ export function toLegacyItinerary(state: ItineraryState, title: string): Itinera
     // Sort items to ensure order
     const sortedItems = [...state.items].sort((a, b) => {
         if (a.day !== b.day) return a.day - b.day;
-        // Strict slot sort
-        const slotWeight = { "MORNING": 0, "AFTERNOON": 1, "EVENING": 2 };
-        return slotWeight[a.slot] - slotWeight[b.slot];
+        // TRUST INPUT ORDER (Fix: Linear Flow)
+        return 0;
     });
 
     sortedItems.forEach(item => {

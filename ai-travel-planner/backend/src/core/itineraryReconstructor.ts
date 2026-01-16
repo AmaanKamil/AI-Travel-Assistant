@@ -21,19 +21,38 @@ export function reconstructItinerary(state: ItineraryState): ItineraryState {
     for (const day of sortedDays) {
         let items = dayMap.get(day) || [];
 
-        // SEPARATE INGREDIENTS
-        const lunches = items.filter(i => i.type === 'MEAL_LUNCH');
-        const dinners = items.filter(i => i.type === 'MEAL_DINNER');
-        const activities = items.filter(i => i.type === 'ATTRACTION' || i.type === 'REST');
+        // 1. DEDUPLICATE (Keep first occurrence)
+        const seen = new Set<string>();
+        const uniqueItems: ItineraryItem[] = [];
+        items.forEach(item => {
+            const key = item.title.toLowerCase().trim();
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueItems.push(item);
+            }
+        });
 
-        // STRICT ENFORCEMENT: MIN 2 ACTIVITIES (Fix B)
+        // 2. LINEAR ORDER ENFORCEMENT
+        // We trust the input order usually, but let's ensure:
+        // - No consecutive meals? (User didn't strictly say, but implied)
+        // - Lunch AFTER activity
+        // - Dinner LAST
+
+        const activities = uniqueItems.filter(i => i.type === 'ATTRACTION' || i.type === 'REST');
+        const lunches = uniqueItems.filter(i => i.type === 'MEAL_LUNCH');
+        const dinners = uniqueItems.filter(i => i.type === 'MEAL_DINNER');
+
+        // FORCE VALID STRUCTURE:
+        // Act -> Act -> (Act?) -> Lunch -> Act -> Dinner
+
+        // Strict Minimum: need 2 activities
         while (activities.length < 2) {
             activities.push({
                 id: `auto-fill-${day}-${activities.length}`,
                 day: day,
                 title: 'Explore City Center',
                 type: 'ATTRACTION',
-                slot: 'MORNING', // Will be re-slotted
+                slot: 'MORNING',
                 estVisitMins: 90,
                 estTravelMins: 15,
                 location: 'Downtown Dubai',
@@ -41,72 +60,45 @@ export function reconstructItinerary(state: ItineraryState): ItineraryState {
             });
         }
 
-        // SELECT PRIMARIES (Deduplicate)
-        const lunch = lunches[0]; // Take first, drop others
-        const dinner = dinners[0]; // Take first, drop others
+        const validDayItems: ItineraryItem[] = [];
 
-        // RE-SLOT ACTIVITIES
-        // Bag of activities to distribute
-        let remainingActivities = [...activities];
+        // A. First 2 Activities
+        validDayItems.push(activities.shift()!);
+        validDayItems.push(activities.shift()!);
 
-        // MORNING (09:00 - 12:00)
-        // Take up to MAX_MORNING (e.g. 2)
-        const morningSlot = remainingActivities.splice(0, MAX_MORNING_ACTIVITIES);
-        morningSlot.forEach(item => {
-            item.slot = 'MORNING';
-        });
-
-        // LUNCH (12:30 - 14:00)
-        // Force Slot & Title
-        if (lunch) {
-            lunch.slot = 'AFTERNOON'; // UI renders 12:30 as header if checking time, or we rely on order
-            // Actually, keep slot=AFTERNOON but ensure it's first in afternoon logic or handled by adapter?
-            // The previous normalizer rule said Lunch=Afternoon.
-            // Let's stick to the Adapter's mapping: 
-            // Morning -> Morning
-            // Lunch -> 12:30 PM (Afternoon)
-            // Afternoon -> Afternoon
-            // Dinner -> 07:00 PM (Evening)
-            // Evening -> Evening
-
-            // To ensure Lunch comes BEFORE Afternoon activities in strict sort:
-            // We might need a stricter slot or sub-order.
-            // For now, let's trust the Adapter's mapItemToBlock which sets time="12:30 PM" for MEAL_LUNCH.
-
-            lunch.title = formatMealTitle(lunch.title, 'Lunch');
+        // B. Optional 3rd Activity or Lunch
+        if (activities.length > 0 && Math.random() > 0.5) {
+            validDayItems.push(activities.shift()!);
         }
 
-        // AFTERNOON (14:00 - 18:00)
-        // Take up to MAX_AFTERNOON (e.g. 2)
-        const afternoonSlot = remainingActivities.splice(0, MAX_AFTERNOON_ACTIVITIES);
-        afternoonSlot.forEach(item => {
-            item.slot = 'AFTERNOON';
-        });
-
-        // DINNER (19:00 - 21:00)
-        if (dinner) {
-            dinner.slot = 'EVENING';
-            dinner.title = formatMealTitle(dinner.title, 'Dinner');
+        // C. Lunch
+        if (lunches.length > 0) {
+            const l = lunches[0];
+            l.title = formatMealTitle(l.title, 'Lunch');
+            validDayItems.push(l);
         }
 
-        // EVENING (21:00+)
-        // Whatever is left goes to Evening (Nightlife, etc)
-        const eveningSlot = remainingActivities;
-        eveningSlot.forEach(item => {
-            item.slot = 'EVENING';
+        // D. Remaining Activities
+        while (activities.length > 0) {
+            validDayItems.push(activities.shift()!);
+        }
+
+        // E. Dinner
+        if (dinners.length > 0) {
+            const d = dinners[0];
+            d.title = formatMealTitle(d.title, 'Dinner');
+            validDayItems.push(d);
+        }
+
+        // F. Slot Labeling (Just for UI grouping if needed, but UI will ignore)
+        // We'll just give them sequential "slot" metadata or keep generic
+        validDayItems.forEach((item, idx) => {
+            if (idx < 2) item.slot = 'MORNING';
+            else if (item.type === 'MEAL_DINNER') item.slot = 'EVENING';
+            else item.slot = 'AFTERNOON';
         });
 
-        // PUSH TO RESULT IN STRICT ORDER
-        // Morning
-        reconstructedItems.push(...morningSlot);
-        // Lunch
-        if (lunch) reconstructedItems.push(lunch);
-        // Afternoon
-        reconstructedItems.push(...afternoonSlot);
-        // Dinner
-        if (dinner) reconstructedItems.push(dinner);
-        // Evening
-        reconstructedItems.push(...eveningSlot);
+        reconstructedItems.push(...validDayItems);
     }
 
     // 3. RECALCULATE TRAVEL TIMES
@@ -173,8 +165,21 @@ function estimateRealTravelTime(from: ItineraryItem, to: ItineraryItem): number 
 
     if (!from.location || !to.location) return 20;
 
-    const fromLoc = from.location.toLowerCase();
-    const toLoc = to.location.toLowerCase();
+    // Fix: Handle object or string location
+    let fromLocString = '';
+    const fromL = from.location as any;
+    if (typeof fromL === 'string') fromLocString = fromL;
+    else if (fromL && typeof fromL === 'object') fromLocString = fromL.zone || '';
+
+    let toLocString = '';
+    const toL = to.location as any;
+    if (typeof toL === 'string') toLocString = toL;
+    else if (toL && typeof toL === 'object') toLocString = toL.zone || '';
+
+    if (!fromLocString || !toLocString) return 20;
+
+    const fromLoc = fromLocString.toLowerCase();
+    const toLoc = toLocString.toLowerCase();
 
     if (fromLoc === toLoc) return 10; // Same place?
 
