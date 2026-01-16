@@ -101,14 +101,36 @@ const getDuration = (category: string, name: string): string => {
     return '90 mins'; // Default
 };
 
+// --- FAMOUS POIS (Fix 3: Seeding) ---
+const FAMOUS_POIS = [
+    { id: 'f1', name: 'Burj Khalifa', category: 'Landmark', location: { lat: 25.1972, lng: 55.2744, zone: 'Downtown' }, score: 100 },
+    { id: 'f2', name: 'Dubai Mall', category: 'Mall', location: { lat: 25.1988, lng: 55.2796, zone: 'Downtown' }, score: 99 },
+    { id: 'f3', name: 'Dubai Fountain', category: 'Show', location: { lat: 25.1965, lng: 55.2755, zone: 'Downtown' }, score: 98 },
+    { id: 'f4', name: 'Palm Jumeirah', category: 'Landmark', location: { lat: 25.1124, lng: 55.1390, zone: 'Palm' }, score: 97 },
+    { id: 'f5', name: 'Dubai Marina Walk', category: 'Walk', location: { lat: 25.0784, lng: 55.1406, zone: 'Marina' }, score: 96 },
+    { id: 'f6', name: 'Desert Safari', category: 'Adventure', location: { lat: 24.8, lng: 55.5, zone: 'Desert' }, score: 95 },
+    { id: 'f7', name: 'Al Fahidi Historic District', category: 'History', location: { lat: 25.2635, lng: 55.2972, zone: 'Old Dubai' }, score: 94 },
+    { id: 'f8', name: 'Souk Madinat Jumeirah', category: 'Souk', location: { lat: 25.1332, lng: 55.1852, zone: 'Jumeirah' }, score: 93 },
+    { id: 'f9', name: 'Global Village', category: 'Attraction', location: { lat: 25.0677, lng: 55.3004, zone: 'Other' }, score: 92 },
+    { id: 'f10', name: 'Aura Skypool', category: 'View', location: { lat: 25.1097, lng: 55.1415, zone: 'Palm' }, score: 91 }
+];
+
 export async function buildItinerary(pois: any[], days: number, pace: string = 'medium'): Promise<Itinerary> {
     console.log(`[MCP: Builder] Building ${days}-day itinerary with strict slots.`);
 
-    const validPOIs = pois.filter(p => sanitizeText(p.name) && isValidPOI(p));
+    // MERGE & PRIORITIZE
+    // We treat incoming POIs as "search results" but we ALWAYS want famous ones available.
+    // Filter duplicates by ID or Name
+    const famousIds = new Set(FAMOUS_POIS.map(p => p.id));
+    const mergedPOIs = [...FAMOUS_POIS, ...pois.filter(p => !famousIds.has(p.id) && sanitizeText(p.name) && isValidPOI(p))];
+
+    // Sort logic: Famous first, then high score
+    mergedPOIs.sort((a, b) => (b.score || 0) - (a.score || 0));
+
     const plans: DayPlan[] = [];
     const usedPOI_IDs = new Set<string>();
 
-    const ZONES = ['Downtown', 'Old Dubai', 'Marina', 'Jumeirah', 'Other'];
+    const ZONES = ['Downtown', 'Old Dubai', 'Marina', 'Palm', 'Jumeirah']; // Added Palm
     const getZoneForDay = (dayNum: number) => ZONES[(dayNum - 1) % ZONES.length];
 
     for (let i = 1; i <= days; i++) {
@@ -116,8 +138,12 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         const targetZone = getZoneForDay(i);
 
         let lastLocation: any = null;
-        let zonePOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || (!p.location.zone && targetZone === 'Other')));
-        let fallbackPOIs = validPOIs.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
+
+        // ZONE FILTERING
+        // We want famous stuff in the zone FIRST
+        // If not enough, extend to "Others"
+        let zonePOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || p.location.zone === 'Other'));
+        let fallbackPOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
 
         // --- STRICT SLOTS (Fix A) ---
         // 1. Morning: Sightseeing (No Lunch/Dinner)

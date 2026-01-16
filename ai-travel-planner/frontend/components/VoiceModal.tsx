@@ -268,11 +268,11 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                     <div className="p-4 bg-gradient-to-t from-gray-950 to-transparent flex flex-col items-center gap-4">
                         <button
                             onClick={handleMicClick}
-                            disabled={isProcessing || isExporting || messages.at(-1)?.content.toLowerCase().includes('email')}
+                            disabled={isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email'))}
                             className={`
                                 relative flex items-center justify-center w-16 h-16 rounded-full transition-all duration-300 shadow-xl
                                 ${isListening ? 'bg-red-500 scale-110 shadow-red-500/40 animate-pulse' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'}
-                                ${(isProcessing || isExporting || messages.at(-1)?.content.toLowerCase().includes('email')) ? 'opacity-50 cursor-not-allowed bg-gray-700' : ''}
+                                ${(isProcessing || isExporting || (messages.at(-1)?.content.toLowerCase().includes('enter your email'))) ? 'opacity-50 cursor-not-allowed bg-gray-700' : ''}
                             `}
                         >
                             {isProcessing ? <Loader2 className="w-6 h-6 animate-spin text-white" /> : <Mic className="w-6 h-6 text-white" />}

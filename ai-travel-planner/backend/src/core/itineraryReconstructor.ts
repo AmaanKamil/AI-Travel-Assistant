@@ -26,6 +26,21 @@ export function reconstructItinerary(state: ItineraryState): ItineraryState {
         const dinners = items.filter(i => i.type === 'MEAL_DINNER');
         const activities = items.filter(i => i.type === 'ATTRACTION' || i.type === 'REST');
 
+        // STRICT ENFORCEMENT: MIN 2 ACTIVITIES (Fix B)
+        while (activities.length < 2) {
+            activities.push({
+                id: `auto-fill-${day}-${activities.length}`,
+                day: day,
+                title: 'Explore City Center',
+                type: 'ATTRACTION',
+                slot: 'MORNING', // Will be re-slotted
+                estVisitMins: 90,
+                estTravelMins: 15,
+                location: 'Downtown Dubai',
+                description: 'Take a relaxing walk and explore the city center.'
+            });
+        }
+
         // SELECT PRIMARIES (Deduplicate)
         const lunch = lunches[0]; // Take first, drop others
         const dinner = dinners[0]; // Take first, drop others
