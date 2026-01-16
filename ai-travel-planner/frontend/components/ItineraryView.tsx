@@ -9,6 +9,7 @@ interface Activity {
     duration: string;
     travelTime?: string;
     time?: string; // Optional: backfill if grouping isn't pre-defined
+    cuisine?: string;
 }
 
 interface Section {
@@ -72,12 +73,16 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
     };
 
     function mapBlockToActivity(block: any): Activity {
+        const isMeal = block.type === 'MEAL' || block.mealType;
+        const fallbackCat = isMeal ? 'Meal' : 'Sightseeing';
+
         return {
             name: block.activity,
-            category: block.category || 'Sightseeing',
+            category: block.category || fallbackCat,
             duration: block.duration || '2 hours',
             travelTime: block.travelTime || '20 mins',
-            time: block.time
+            time: block.time,
+            cuisine: block.cuisine
         };
     }
 
@@ -128,6 +133,9 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                                     <div>
                                                         <h5 className="font-medium text-white">{activity.name}</h5>
+                                                        {activity.cuisine && (
+                                                            <div className="text-sm text-gray-300 italic mb-1">{activity.cuisine}</div>
+                                                        )}
                                                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                                                             <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                                                 {activity.category}

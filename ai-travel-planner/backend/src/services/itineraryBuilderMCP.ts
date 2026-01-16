@@ -35,11 +35,29 @@ const RESTAURANT_POOL: Record<string, Restaurant[]> = {
     ]
 };
 
-const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'dinner'): Restaurant => {
+const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'dinner', usedNames: Set<string>): Restaurant => {
     const pool = RESTAURANT_POOL[zone] || RESTAURANT_POOL['Other'];
-    // Deterministic rotation based on day and type
-    const index = (dayNum * (type === 'lunch' ? 2 : 3)) % pool.length;
-    return pool[index];
+
+    // Attempt deterministic rotation first
+    let index = (dayNum * (type === 'lunch' ? 2 : 3)) % pool.length;
+    let candidate = pool[index];
+
+    // Deduplication check
+    if (usedNames.has(candidate.name)) {
+        // Try to find ANY unused one in the pool
+        const unused = pool.find(r => !usedNames.has(r.name));
+        if (unused) {
+            candidate = unused;
+        } else {
+            // Check global 'Other' pool if zone is exhausted
+            const globalUnused = RESTAURANT_POOL['Other'].find(r => !usedNames.has(r.name));
+            if (globalUnused) candidate = globalUnused;
+            // Else accept duplicate as last resort (or handle gracefully)
+        }
+    }
+
+    usedNames.add(candidate.name); // Mark as used
+    return candidate;
 };
 
 // --- VALIDATION HELPER ---
@@ -128,7 +146,10 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
     mergedPOIs.sort((a, b) => (b.score || 0) - (a.score || 0));
 
     const plans: DayPlan[] = [];
+
+    // --- GLOBAL DEDUPLICATION STATE ---
     const usedPOI_IDs = new Set<string>();
+    const usedPlaceNames = new Set<string>(); // Strict duplicate name check
 
     const ZONES = ['Downtown', 'Old Dubai', 'Marina', 'Palm', 'Jumeirah']; // Added Palm
     const getZoneForDay = (dayNum: number) => ZONES[(dayNum - 1) % ZONES.length];
@@ -142,8 +163,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         // ZONE FILTERING
         // We want famous stuff in the zone FIRST
         // If not enough, extend to "Others"
-        let zonePOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && (p.location.zone === targetZone || p.location.zone === 'Other'));
-        let fallbackPOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && p.location.zone !== targetZone);
+        // Also Filter out used IDs AND used Names
+        let zonePOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && !usedPlaceNames.has(p.name) && (p.location.zone === targetZone || p.location.zone === 'Other'));
+        let fallbackPOIs = mergedPOIs.filter(p => !usedPOI_IDs.has(p.id) && !usedPlaceNames.has(p.name) && p.location.zone !== targetZone);
 
         // --- STRICT LINEAR ALGORITHM (Fix: No Slots) ---
         // 1. SELECT ATTRACTIONS (2-3)
@@ -161,72 +183,82 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         for (let k = 0; k < countStep1; k++) {
             if (pool.length > 0) {
                 const selected = pool.shift(); // Take first (highest priority)
-                dayActivities.push(selected);
-                usedPOI_IDs.add(selected.id);
+                if (selected && !usedPlaceNames.has(selected.name)) {
+                    dayActivities.push(selected);
+                    usedPOI_IDs.add(selected.id);
+                    usedPlaceNames.add(selected.name); // Add to Name Set
+                }
             }
         }
 
         dailyBlocks.push(...dayActivities.map(poi => ({
             id: `block-${Math.random().toString(36).substr(2, 9)}`,
-            time: 'Morning', // Label for user context, but order matters most
+            time: '',     // REMOVED explicit time
             slot: 'morning' as 'morning',
             activity: `Visit ${poi.name}`,
             duration: getDuration(poi.category, poi.name),
             description: `Explore ${poi.category}.`,
-            type: 'activity' as 'activity',
+            type: 'ATTRACTION' as any, // Typed as ATTRACTION
             fixed: false,
-            location: poi.location?.zone || poi.location?.name || ''
+            location: poi.location?.zone || poi.location?.name || '',
+            category: 'Sightseeing' // UI fallback
         })));
 
         // Step 2: Insert Lunch
-        const lunchSpot = getRestaurantForZone(targetZone, i, 'lunch');
+        const lunchSpot = getRestaurantForZone(targetZone, i, 'lunch', usedPlaceNames);
         dailyBlocks.push({
             id: `block-lunch-${i}`,
-            time: '12:30 PM',
+            time: '',    // REMOVED explicit time
             slot: 'afternoon' as 'afternoon',
             activity: `Lunch at ${lunchSpot.name}`,
             duration: '90 mins',
             description: `${lunchSpot.cuisine} • ${lunchSpot.area}`,
-            type: 'meal' as 'meal',
+            type: 'MEAL' as any, // Typed as MEAL
             mealType: 'lunch' as 'lunch',
-            fixed: true
+            fixed: true,
+            cuisine: lunchSpot.cuisine, // ADDED metadata
+            category: 'Meal'
         });
 
 
         // Step 3: Add 1 more Activity
         if (pool.length > 0) {
             const selected = pool.shift();
-            usedPOI_IDs.add(selected.id);
-            dailyBlocks.push({
-                id: `block-${Math.random().toString(36).substr(2, 9)}`,
-                time: 'Afternoon',
-                slot: 'afternoon',
-                activity: `Visit ${selected.name}`,
-                duration: getDuration(selected.category, selected.name),
-                description: `Explore ${selected.category}.`,
-                type: 'activity' as 'activity',
-                fixed: false,
-                location: selected.location?.zone || selected.location?.name || ''
-            });
+            if (selected && !usedPlaceNames.has(selected.name) && !usedPOI_IDs.has(selected.id)) {
+                usedPOI_IDs.add(selected.id);
+                usedPlaceNames.add(selected.name);
+
+                dailyBlocks.push({
+                    id: `block-${Math.random().toString(36).substr(2, 9)}`,
+                    time: '', // REMOVED explicit time
+                    slot: 'afternoon',
+                    activity: `Visit ${selected.name}`,
+                    duration: getDuration(selected.category, selected.name),
+                    description: `Explore ${selected.category}.`,
+                    type: 'ATTRACTION' as any,
+                    fixed: false,
+                    location: selected.location?.zone || selected.location?.name || '',
+                    category: 'Sightseeing'
+                });
+            }
         }
 
         // Step 4: Insert Dinner
-        const dinnerSpot = getRestaurantForZone(targetZone, i, 'dinner');
+        const dinnerSpot = getRestaurantForZone(targetZone, i, 'dinner', usedPlaceNames);
         dailyBlocks.push({
             id: `block-dinner-${i}`,
-            time: '07:00 PM',
+            time: '', // REMOVED explicit time
             slot: 'evening' as 'evening',
             activity: `Dinner at ${dinnerSpot.name}`,
             duration: '90 mins',
             description: `${dinnerSpot.cuisine} • ${dinnerSpot.area}`,
-            type: 'meal' as 'meal',
+            type: 'MEAL' as any,
             mealType: 'dinner' as 'dinner',
-            fixed: true
+            fixed: true,
+            cuisine: dinnerSpot.cuisine, // ADDED metadata
+            category: 'Meal'
         });
 
-        // REFRESH POOL
-        // Remove used items from master lists for next iterations
-        // (already done via usedPOI_IDs set check in next loop)
         plans.push({ day: i, blocks: dailyBlocks });
     }
 

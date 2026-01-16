@@ -13,7 +13,7 @@ export interface TimeBlock {
     id: string;
     time: string; // Keep for UI display (e.g. "09:00 AM")
     slot: 'morning' | 'afternoon' | 'evening';
-    type: 'activity' | 'meal' | 'transfer' | 'other';
+    type: 'activity' | 'meal' | 'transfer' | 'other' | 'MEAL' | 'ATTRACTION';
     mealType?: 'lunch' | 'dinner' | 'breakfast';
     activity: string; // Mapped to 'title'
     location?: string;
