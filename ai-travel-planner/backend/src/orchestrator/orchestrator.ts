@@ -126,37 +126,21 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         if (
             text.includes('email') ||
             text.includes('send') ||
-            text.includes('pdf')
+            text.includes('pdf') ||
+            text.includes('share')
         ) {
-            console.log('→ Routing to EXPORT');
+            console.log('→ Routing to EXPORT (UI Trigger)');
 
-            try {
-                // Use captured email or placeholder if missing
-                const targetEmail = ctx.userEmail || (text.match(/[\w.-]+@[\w.-]+\.\w+/) || [])[0];
+            // UX FIX: Do not ask for email via voice.
+            // Do not send email here. 
+            // Trigger UI mode only.
 
-                if (!targetEmail) {
-                    return {
-                        message: 'What email address should I send it to?',
-                        currentState: 'READY'
-                    };
-                }
-
-                // Temporary check for pdfService
-                const pdfPath = await pdfService.generate(ctx.itinerary!);
-                await emailService.send(targetEmail, pdfPath);
-
-                return {
-                    message: 'I’ve emailed your itinerary to you.',
-                    currentState: 'READY'
-                };
-            } catch (e) {
-                console.error('EXPORT FAILED', e);
-
-                return {
-                    message: 'I couldn’t send the email. Please try again.',
-                    currentState: 'READY'
-                };
-            }
+            return {
+                message: 'Please enter your email in the field below and click send.',
+                currentState: 'READY',
+                // @ts-ignore - Dynamic property for UI
+                uiAction: 'REQUEST_EMAIL'
+            };
         }
         // ---- DEFAULT POST PLAN ----
         return {

@@ -45,60 +45,49 @@ router.post('/edit-itinerary', async (req, res) => {
 */
 
 
-router.post('/export-itinerary', async (req, res) => {
-    // Transactional Export Logic
-    const { email, itinerary } = req.body;
+// /export-itinerary removed in favor of /send-itinerary-email
 
-    if (!email || !itinerary) {
-        console.error("[API: Export] Missing email or itinerary payload.");
-        res.status(400).json({ success: false, message: "Missing email or itinerary data." });
-        return;
-    }
-
-    try {
-        console.log(`[API: Export] Generating PDF for ${email}...`);
-        const pdfPath = await generatePDF(itinerary);
-
-        console.log(`[API: Export] Sending email to ${email}...`);
-        const emailResult = await emailService.send(email, pdfPath);
-
-        if (!emailResult.success) {
-            console.error(`[API: Export] Email Service Failed: ${emailResult.message}`);
-            return res.status(500).json({
-                success: false,
-                message: emailResult.message
-            });
-        }
-
-        return res.json({
-            success: true,
-            message: 'Your itinerary has been emailed successfully.'
-        });
-    } catch (err: any) {
-        console.error("[API: Export] Internal Error:", err);
-        return res.status(500).json({
-            success: false,
-            message: 'Export failed due to server error.'
-        });
-    }
-});
-
+// CONSOLIDATED EMAIL ENDPOINT
 router.post('/send-itinerary-email', async (req, res) => {
     const { email, itinerary } = req.body;
-    if (!email || !itinerary) {
-        res.status(400).json({ success: false, message: "Missing email or itinerary data." });
+
+    // 1. Validation
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+        res.status(400).json({ success: false, message: "Please provide a valid email address." });
         return;
     }
+    if (!itinerary) {
+        res.status(400).json({ success: false, message: "Missing itinerary data." });
+        return;
+    }
+
+    // 2. Safe Execution
     try {
+        console.log(`[API] Sending PDF to ${email}`);
         const pdfPath = await generatePDF(itinerary);
+
+        // emailService.send is already safe (returns object, doesn't throw)
         const emailResult = await emailService.send(email, pdfPath);
+
         if (!emailResult.success) {
-            return res.status(500).json({ success: false, message: emailResult.message });
+            // Logged internally, return clean error to UI
+            // Return 200 with success:false to handle gracefully on client without axios throw?
+            // User requested "No silent failures", "Return structured error".
+            // Typically 400 or 500 is fine if body is structured. 
+            // Let's stick to 200 for "Handled Failure" or strict 500 with message.
+            // User requirement: "Return structured error... Never return empty 500".
+            return res.status(200).json({ success: false, message: emailResult.message });
         }
-        return res.json({ success: true, message: 'Your itinerary has been emailed successfully.' });
+
+        return res.json({ success: true, message: 'Your itinerary has been sent!' });
+
     } catch (err: any) {
-        console.error("[API: Export] Internal Error:", err);
-        return res.status(500).json({ success: false, message: 'Export failed due to server error.' });
+        console.error("[API: Critical Email Error]", err);
+        // Fallback for unexpected crashe (like PDF generation fail)
+        return res.status(200).json({
+            success: false,
+            message: 'Could not generate PDF or send email. Please try again.'
+        });
     }
 });
 

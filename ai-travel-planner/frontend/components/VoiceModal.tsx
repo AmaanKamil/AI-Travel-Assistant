@@ -111,8 +111,22 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                 setTimeout(() => setHighlightDay(null), 2000);
             }
 
+            // UI ACTION: REQUEST_EMAIL
+            if (result.uiAction === 'REQUEST_EMAIL') {
+                setIsListening(false); // Stop mic
+                setTimeout(() => {
+                    scrollToBottom();
+                    const emailInput = document.getElementById('email-input-field');
+                    if (emailInput) {
+                        emailInput.focus();
+                        emailInput.classList.add('ring-2', 'ring-blue-500');
+                        setTimeout(() => emailInput.classList.remove('ring-2', 'ring-blue-500'), 2000);
+                    }
+                }, 500);
+            }
+
             // Play Voice (unless it's an email prompt)
-            const isEmailPrompt = result.message?.toLowerCase().includes('email');
+            const isEmailPrompt = result.uiAction === 'REQUEST_EMAIL';
             if (result.audio && !isEmailPrompt) {
                 playAudio(result.audio);
             }
@@ -304,6 +318,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                                         <div className="relative">
                                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                                             <input
+                                                id="email-input-field"
                                                 type="email"
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
