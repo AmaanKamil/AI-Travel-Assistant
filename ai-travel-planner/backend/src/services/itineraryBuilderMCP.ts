@@ -144,9 +144,9 @@ const FAMOUS_POIS = [
 const generateExplanation = (poi: any, zone: string, isIconicPoi: boolean, isMeal: boolean): any => {
     const category = poi.category || (isMeal ? 'Dining' : 'Sightseeing');
     return {
-        whyChosen: isIconicPoi
+        why_this_was_chosen: isIconicPoi
             ? `I picked ${poi.name} because it is a world-famous landmark in ${zone} that matches your goal of seeing Dubai's iconic sights.`
-            : `This spot in ${zone} is highly rated for its ${category.toLowerCase()} experience and fits perfectly into the day's route.`,
+            : `This spot in ${zone} is highly rated for its ${category.toLowerCase()} experience and fits perfectly into the day's route. Why? It optimizes your travel time.`,
 
         feasibilityReason: isMeal
             ? "Allocated 45 mins. This fits within the standard meal break time and is close to your other activities."

@@ -5,14 +5,17 @@ import { OrchestratorState } from './stateMachine';
 export interface SessionContext {
     sessionId: string;
     currentState: OrchestratorState;
-    collectedConstraints: {
+    tripState: {
+        destination?: string;
         days?: number;
         pace?: string;
         interests?: string[];
-        constraints?: string[];
+        constraints?: string[]; // Generic bucket for other things
     };
-    constraintsCollected: boolean;
+    clarificationsCompleted: boolean;
+    // constraintsCollected: boolean; // DEPRECATED in favor of clarificationsCompleted
     planGenerated: boolean;
+    // planGenerated: boolean; (duplicate removed)
     clarificationCount: number;
     userEmail?: string;
     itinerary?: Itinerary;
@@ -34,8 +37,8 @@ export function createNewSession(sessionId: string): SessionContext {
     const newContext: SessionContext = {
         sessionId,
         currentState: 'IDLE',
-        collectedConstraints: {},
-        constraintsCollected: false,
+        tripState: { destination: 'Dubai' }, // Default context
+        clarificationsCompleted: false, // Explicit Gate
         planGenerated: false,
         clarificationCount: 0
     };

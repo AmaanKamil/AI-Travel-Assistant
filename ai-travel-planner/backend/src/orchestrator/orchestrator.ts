@@ -19,7 +19,7 @@ const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
 
 // STRICT VALIDATION GATE
 function validatePlanningContext(ctx: SessionContext): 'VALID' | 'MISSING_DAYS' | 'MISSING_PACE' | 'MISSING_INTERESTS' {
-    const c = ctx.collectedConstraints;
+    const c = ctx.tripState;
     if (!c.days) return 'MISSING_DAYS';
     if (!c.pace || c.pace.toLowerCase() === 'unknown') return 'MISSING_PACE';
     if (!c.interests || c.interests.length === 0) return 'MISSING_INTERESTS';
@@ -295,7 +295,11 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             // STRICT RESET: User wants a new plan, so invalidate previous state
             console.log('[Orchestrator] Starting NEW Plan -> Resetting Constraints');
             ctx.currentState = 'COLLECTING_INFO';
-            ctx.constraintsCollected = false;
+
+            // RESET TRIP STATE -> Authoritative Source
+            ctx.tripState = { destination: 'Dubai' };
+            ctx.clarificationsCompleted = false;
+
             ctx.planGenerated = false;
             ctx.itinerary = undefined;
             // We keep collectedConstraints partially to allow "refinement" if entities are present,
@@ -308,13 +312,13 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // SMART MERGE: Only update fields that are actually present and valid
     if (intent.entities) {
         const updates = intent.entities;
-        if (updates.days) ctx.collectedConstraints.days = updates.days;
-        if (updates.pace) ctx.collectedConstraints.pace = updates.pace;
+        if (updates.days) ctx.tripState.days = updates.days;
+        if (updates.pace) ctx.tripState.pace = updates.pace;
         if (updates.interests && updates.interests.length > 0) {
             // Append or replace? Let's replace for now to allow correction, or maybe union?
             // "I like food" -> replaces "I like history"? Usually clarification replaces or refines.
             // Let's stick to replace for simplicity of "correction".
-            ctx.collectedConstraints.interests = updates.interests;
+            ctx.tripState.interests = updates.interests;
         }
     }
 
@@ -324,7 +328,8 @@ export async function handleUserInput(sessionId: string, userInput: string) {
 
         // Prevent re-entry if already done, unless explicit change requested
         // AND validation is actually passing
-        if (ctx.constraintsCollected && intent.type !== 'CHANGE_PREFERENCES' && validationState === 'VALID') {
+        if (intent.type !== 'CHANGE_PREFERENCES' && validationState === 'VALID') {
+            ctx.clarificationsCompleted = true; // GATE OPEN
             ctx.currentState = 'CONFIRMING';
             // Fall through to confirming logic below
         } else {
@@ -337,14 +342,14 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             }
 
             // All fields collected
-            ctx.constraintsCollected = true;
+            ctx.clarificationsCompleted = true; // GATE OPEN
             ctx.currentState = 'CONFIRMING';
             saveSession(ctx);
 
             return {
-                message: `I understand you want a ${ctx.collectedConstraints.days}-day trip to Dubai, focused on ${ctx.collectedConstraints.interests?.join(
+                message: `I understand you want a ${ctx.tripState.days}-day trip to Dubai, focused on ${ctx.tripState.interests?.join(
                     ', '
-                )}, at a ${ctx.collectedConstraints.pace} pace. Should I generate the plan?`,
+                )}, at a ${ctx.tripState.pace} pace. Should I generate the plan?`,
                 currentState: 'CONFIRMING',
             };
         }
@@ -379,11 +384,11 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             console.log("[Orchestrator] Context VALID. Building itinerary...");
             const itinerary = await buildItinerary(
                 // @ts-ignore
-                ctx.collectedConstraints.interests,
+                ctx.tripState.interests,
                 // @ts-ignore
-                ctx.collectedConstraints.days, // NO DEFAULT
+                ctx.tripState.days, // NO DEFAULT
                 // @ts-ignore
-                ctx.collectedConstraints.pace   // NO DEFAULT
+                ctx.tripState.pace   // NO DEFAULT
             );
 
             if (itinerary) {
@@ -410,7 +415,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 saveSession(ctx);
 
                 return {
-                    message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
+                    message: `I've created a custom itinerary for you based on ${ctx.tripState.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
                     itinerary: ctx.itinerary,
                     session_id: ctx.sessionId,
                     currentState: 'POST_PLAN_READY',

@@ -12,7 +12,8 @@ export const explainService = {
                     if (lowerText.includes(block.activity.toLowerCase()) || block.activity.toLowerCase().includes(lowerText)) {
                         // GROUNDED ANSWER (Strict)
                         if ((block as any).explanation) {
-                            return (block as any).explanation.whyChosen;
+                            // Support new metadata field explicitly
+                            return (block as any).explanation.why_this_was_chosen || (block as any).explanation.whyChosen;
                         }
 
                         // Fallback (should be rare with new logic)
