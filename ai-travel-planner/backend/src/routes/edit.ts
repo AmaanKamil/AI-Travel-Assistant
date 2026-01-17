@@ -46,16 +46,23 @@ router.post('/', async (req, res) => {
     };
 
     try {
-        const updated = applyDeterministicEdit(ctx.itinerary, intent);
+        const result = applyDeterministicEdit(ctx.itinerary, intent);
 
-        ctx.itinerary = updated;
-        saveSession(ctx);
+        if (result.success) {
+            ctx.itinerary = result.itinerary;
+            saveSession(ctx);
 
-        res.json({
-            success: true,
-            message: "I've updated your itinerary.",
-            itinerary: updated
-        });
+            res.json({
+                success: true,
+                message: result.message || "I've updated your itinerary.",
+                itinerary: result.itinerary
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                message: result.message || 'Could not apply the requested edit.'
+            });
+        }
     } catch (err) {
         res.status(500).json({
             success: false,
