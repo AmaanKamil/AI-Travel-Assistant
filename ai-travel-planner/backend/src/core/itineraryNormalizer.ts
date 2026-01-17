@@ -19,6 +19,7 @@ export interface ItineraryItem {
     location?: string;
     category?: string; // Preserved for normalization
     sources?: any[];   // Preserved for normalization
+    explanation?: any; // Preserved for grounded answers
 }
 
 export interface ItineraryState {

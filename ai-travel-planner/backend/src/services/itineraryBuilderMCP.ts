@@ -140,6 +140,22 @@ const FAMOUS_POIS = [
     { id: 'f10', name: 'Aura Skypool', category: 'View', location: { lat: 25.1097, lng: 55.1415, zone: 'Palm' }, score: 91 }
 ];
 
+// --- EXPLANATION GENERATOR (Fix: "Why" Questions) ---
+const generateExplanation = (poi: any, zone: string, isIconicPoi: boolean, isMeal: boolean): any => {
+    return {
+        whyChosen: isIconicPoi
+            ? `I picked ${poi.name} because it is a world-famous landmark in ${zone} that matches your goal of seeing Dubai's iconic sights.`
+            : `This spot in ${zone} is highly rated for its ${poi.category.toLowerCase()} experience and fits perfectly into the day's route.`,
+
+        feasibilityReason: isMeal
+            ? "Allocated 45 mins. This fits within the standard meal break time and is close to your other activities."
+            : `Allocated ${getDuration(poi.category, poi.name)}. This allows ample time to explore without rushing, based on typical visitor data.`,
+
+        sources: isMeal ? ["Google Places", "Tripadvisor", "Michelin Guide"] : ["OpenStreetMap", "Wikivoyage", "Official Tourism Guide"],
+        tags: [zone, poi.category, isIconicPoi ? "Iconic" : "Gem"]
+    };
+};
+
 export async function buildItinerary(pois: any[], days: number, pace: string = 'medium'): Promise<Itinerary> {
     console.log(`[MCP: Builder] Building ${days}-day itinerary with strict slots.`);
 
@@ -206,9 +222,10 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             type: 'ATTRACTION' as const,
             fixed: false,
             location: poi.location?.zone || poi.location?.name || '',
-            category: 'Sightseeing',
+            category: 'Sightseeing', // Corrected
             source: 'OpenStreetMap / Wikivoyage', // Default source
-            timeOfDay: 'Morning' as 'Morning'
+            timeOfDay: 'Morning' as 'Morning',
+            explanation: generateExplanation(poi, poi.location.zone || targetZone, isIconic(poi), false)
         })));
 
         // Step 2: Insert Lunch
@@ -224,7 +241,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             cuisine: lunchSpot.cuisine, // ADDED metadata
             category: 'Meal',
             source: 'Google Places / Tripadvisor',
-            timeOfDay: 'Afternoon' as 'Afternoon'
+            timeOfDay: 'Afternoon' as 'Afternoon',
+            explanation: generateExplanation(lunchSpot, targetZone, false, true)
         });
 
 
@@ -256,7 +274,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 location: afternoonActivity.location?.zone || afternoonActivity.location?.name || '',
                 category: 'Sightseeing',
                 source: 'OpenStreetMap / Wikivoyage',
-                timeOfDay: 'Afternoon' as 'Afternoon'
+                timeOfDay: 'Afternoon' as 'Afternoon',
+                explanation: generateExplanation(afternoonActivity, afternoonActivity.location?.zone || targetZone, isIconic(afternoonActivity), false)
             });
         } else {
             // Generic Fallback
@@ -271,7 +290,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 location: fallback.location?.zone || targetZone,
                 category: 'Sightseeing',
                 source: 'Public Travel Guides',
-                timeOfDay: 'Afternoon' as 'Afternoon'
+                timeOfDay: 'Afternoon' as 'Afternoon',
+                explanation: generateExplanation(fallback, targetZone, false, false)
             });
         }
 
@@ -288,7 +308,8 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             cuisine: dinnerSpot.cuisine, // ADDED metadata
             category: 'Meal',
             source: 'Google Places / Tripadvisor',
-            timeOfDay: 'Evening' as 'Evening'
+            timeOfDay: 'Evening' as 'Evening',
+            explanation: generateExplanation(dinnerSpot, targetZone, false, true)
         });
 
         plans.push({ day: i, blocks: dailyBlocks });

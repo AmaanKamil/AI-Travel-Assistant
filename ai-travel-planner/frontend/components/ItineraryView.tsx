@@ -1,7 +1,7 @@
 "use client";
 
-import React from 'react';
-import { Calendar, MapPin } from 'lucide-react';
+import React, { useState } from 'react';
+import { Calendar, MapPin, Info, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface Activity {
     name: string;
@@ -97,48 +97,7 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
 
                                                         return (
                                                             <div key={bIdx} className="relative">
-                                                                {/* TRAVEL TIME (rendered before item if exists) */}
-                                                                {block.travelTime && (
-                                                                    <div className="flex items-center gap-2 text-xs text-gray-500 italic mb-3 ml-2">
-                                                                        <div className="h-4 w-0.5 bg-gray-800"></div>
-                                                                        <span>↓ {block.travelTime}</span>
-                                                                    </div>
-                                                                )}
-
-                                                                {/* ITEM CARD */}
-                                                                <div className="relative pl-6 border-l-2 border-white/5 hover:border-blue-500/50 transition-colors">
-                                                                    <div className="absolute -left-[9px] top-6 w-4 h-4 rounded-full bg-gray-800 border-2 border-white/10 group-hover:border-blue-500/30 transition-colors" />
-
-                                                                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
-                                                                        <div className="flex flex-col gap-2">
-                                                                            <div className="flex justify-between items-start">
-                                                                                <h5 className="font-medium text-white text-lg">{activity.name}</h5>
-                                                                                {block.duration && (
-                                                                                    <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
-                                                                                        {block.duration}
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-
-                                                                            {activity.cuisine ? (
-                                                                                <div className="text-sm text-blue-400 italic">Cuisine: {activity.cuisine}</div>
-                                                                            ) : activity.description ? (
-                                                                                <div className="text-sm text-gray-400">{activity.description}</div>
-                                                                            ) : null}
-
-                                                                            <div className="flex items-center justify-between mt-2">
-                                                                                <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20">
-                                                                                    {activity.category}
-                                                                                </span>
-                                                                                {block.source && (
-                                                                                    <span className="text-[10px] text-gray-600">
-                                                                                        Source: {block.source}
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
+                                                                <ItemCard block={block} activity={activity} />
                                                             </div>
                                                         );
                                                     })}
@@ -151,6 +110,85 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                         </div>
                     );
                 })}
+            </div>
+        </div>
+    );
+};
+
+// Sub-component to manage collapsible state efficiently
+const ItemCard = ({ block, activity }: { block: any, activity: any }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const explanation = block.explanation;
+
+    return (
+        <div className="relative">
+            {/* TRAVEL TIME (rendered before item if exists) */}
+            {block.travelTime && (
+                <div className="flex items-center gap-2 text-xs text-gray-500 italic mb-3 ml-2">
+                    <div className="h-4 w-0.5 bg-gray-800"></div>
+                    <span>↓ {block.travelTime}</span>
+                </div>
+            )}
+
+            {/* ITEM CARD */}
+            <div className="relative pl-6 border-l-2 border-white/5 hover:border-blue-500/50 transition-colors">
+                <div className="absolute -left-[9px] top-6 w-4 h-4 rounded-full bg-gray-800 border-2 border-white/10 group-hover:border-blue-500/30 transition-colors" />
+
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
+                    <div className="flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                            <h5 className="font-medium text-white text-lg">{activity.name}</h5>
+                            <div className="flex items-center gap-2">
+                                {block.duration && (
+                                    <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
+                                        {block.duration}
+                                    </span>
+                                )}
+                                {explanation && (
+                                    <button
+                                        onClick={() => setIsOpen(!isOpen)}
+                                        className="text-gray-400 hover:text-blue-400 transition-colors p-1"
+                                    >
+                                        <Info size={16} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {activity.cuisine ? (
+                            <div className="text-sm text-blue-400 italic">Cuisine: {activity.cuisine}</div>
+                        ) : activity.description ? (
+                            <div className="text-sm text-gray-400">{activity.description}</div>
+                        ) : null}
+
+                        <div className="flex items-center justify-between mt-2">
+                            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20">
+                                {activity.category}
+                            </span>
+                        </div>
+
+                        {/* EXPLANATION DROPDOWN */}
+                        {isOpen && explanation && (
+                            <div className="mt-4 pt-3 border-t border-white/10 text-sm animate-in fade-in slide-in-from-top-2 duration-300">
+                                <p className="text-gray-300 mb-2">
+                                    <span className="text-blue-400 font-semibold">Why: </span>
+                                    {explanation.whyChosen}
+                                </p>
+                                <p className="text-gray-300 mb-2">
+                                    <span className="text-green-400 font-semibold">Feasibility: </span>
+                                    {explanation.feasibilityReason}
+                                </p>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {explanation.sources?.map((src: string, i: number) => (
+                                        <span key={i} className="text-[10px] text-gray-500 border border-white/10 px-1.5 py-0.5 rounded">
+                                            {src}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

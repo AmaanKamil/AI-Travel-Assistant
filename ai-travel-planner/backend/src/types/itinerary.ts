@@ -14,6 +14,14 @@ export interface Source {
     url: string;
 }
 
+export interface Explanation {
+    whyChosen: string;
+    feasibilityReason: string;
+    alternativesConsidered?: string;
+    tags?: string[];
+    sources: string[];
+}
+
 export interface NormalizedItineraryItem {
     id: string;
     day: number;
@@ -27,6 +35,7 @@ export interface NormalizedItineraryItem {
     travelTimeRange: string | null;
     cuisine?: string | null;
     sources: Source[];
+    explanation?: Explanation;
 }
 
 export interface TimeBlock extends Omit<Partial<NormalizedItineraryItem>, 'type' | 'mealType'> {

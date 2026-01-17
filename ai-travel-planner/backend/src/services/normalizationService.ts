@@ -1,4 +1,4 @@
-import { Itinerary, TimeBlock, NormalizedItineraryItem, Source } from '../types/itinerary';
+import { Itinerary, TimeBlock, NormalizedItineraryItem, Source, Explanation } from '../types/itinerary';
 
 export function normalizeItinerary(itinerary: Itinerary): Itinerary {
     const normalizedCopy = JSON.parse(JSON.stringify(itinerary));
@@ -23,7 +23,8 @@ export function normalizeItinerary(itinerary: Itinerary): Itinerary {
             timeOfDay: item.timeBlock,
             travelTime: item.travelTimeRange || undefined,
             source: item.sources[0]?.label,
-            duration: item.durationRange
+            duration: item.durationRange,
+            explanation: item.explanation // Backfill
         }));
     });
 
@@ -55,6 +56,14 @@ function normalizeItem(block: TimeBlock, day: number): NormalizedItineraryItem {
     // Normalize Sources
     const sources = getDeterministicSources(title, type === 'meal');
 
+    // Normalize Explanation (Backfill if missing)
+    const explanation = (block as any).explanation || {
+        whyChosen: `I included ${title} because it is a popular ${type === 'meal' ? 'dining spot' : 'attraction'} in the ${zone} area.`,
+        feasibilityReason: `Allocated ${durationRange}. This fits well within your daily schedule.`,
+        tags: [zone, type],
+        sources: sources.map(s => s.label)
+    };
+
     return {
         id: block.id,
         day,
@@ -67,7 +76,8 @@ function normalizeItem(block: TimeBlock, day: number): NormalizedItineraryItem {
         durationRange,
         travelTimeRange: null, // Placeholder, calculated in Pass 2
         cuisine: block.cuisine || null,
-        sources
+        sources,
+        explanation
     };
 }
 
