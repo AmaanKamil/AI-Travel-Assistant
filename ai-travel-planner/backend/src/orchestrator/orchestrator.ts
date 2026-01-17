@@ -13,6 +13,7 @@ import { explainService } from '../services/explainService';
 // REMOVED: import * as editEngine from '../services/editEngineWrapper';
 import { pdfService } from '../services/pdfService';
 import { emailService } from '../services/emailService';
+import { validateAndNormalizeItinerary } from '../utils/itineraryValidator'; // FORCE NORMALIZATION
 
 const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
 
@@ -234,6 +235,10 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 ItineraryGate.verify(normalizedState);
 
                 ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary.title);
+
+                // FORCE NORMALIZATION AT THE GATE
+                ctx.itinerary = validateAndNormalizeItinerary(ctx.itinerary);
+
                 ctx.currentState = 'POST_PLAN_READY'; // Active state
                 saveSession(ctx);
 
@@ -370,6 +375,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 ItineraryGate.verify(normalizedState); // <--- HARD GATE
 
                 ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
+
+                // FORCE NORMALIZATION AT THE GATE
+                ctx.itinerary = validateAndNormalizeItinerary(ctx.itinerary);
 
                 // ISOLATED PDF GENERATION (Non-blocking)
                 try {

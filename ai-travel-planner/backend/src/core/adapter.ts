@@ -66,7 +66,9 @@ function mapBlockToItem(block: TimeBlock, day: number): ItineraryItem {
         estTravelMins: 0, // Logic to recalculate later?
         restaurantCuisine: block.description?.split('•')[0]?.trim(),
         description: block.description,
-        location: block.location
+        location: block.location,
+        category: block.category,
+        sources: block.sources // Keep the array if it exists
     };
 }
 
@@ -92,7 +94,9 @@ function mapItemToBlock(item: ItineraryItem): TimeBlock {
         activity: item.title,
         duration: `${item.estVisitMins} mins` === '0 mins' ? 'varies' : `${item.estVisitMins} mins`, // simplified
         description: item.description,
-        fixed: item.type !== 'ATTRACTION' // Meals are usually fixed
+        fixed: item.type !== 'ATTRACTION', // Meals are usually fixed
+        category: item.category,
+        sources: item.sources
     };
 }
 

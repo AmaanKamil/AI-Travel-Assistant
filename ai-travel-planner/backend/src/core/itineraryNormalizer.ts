@@ -17,6 +17,8 @@ export interface ItineraryItem {
     restaurantCuisine?: string; // For meals
     description?: string; // Keep metadata
     location?: string;
+    category?: string; // Preserved for normalization
+    sources?: any[];   // Preserved for normalization
 }
 
 export interface ItineraryState {
