@@ -60,6 +60,18 @@ const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'din
     return candidate;
 };
 
+// --- FALLBACK ACTIVITY GENERATOR ---
+const getFallbackActivity = (zone: string) => {
+    const fallbacks: Record<string, any> = {
+        'Downtown': { name: 'Dubai Boulevard Walk', category: 'Walk', description: 'Leisurely stroll through Downtown Dubai.' },
+        'Old Dubai': { name: 'Creek Promenade', category: 'Walk', description: 'Walk along the historic Dubai Creek.' },
+        'Marina': { name: 'Marina Promenade', category: 'Walk', description: 'Scenic walk along the water.' },
+        'Palm': { name: 'Palm West Beach', category: 'Beach', description: 'Relax at the beach promenade.' },
+        'Jumeirah': { name: 'Kite Beach Walk', category: 'Walk', description: 'Walk along the coast.' }
+    };
+    return fallbacks[zone] || { name: 'City Exploration', category: 'Walk', description: 'Explore the local area.' };
+};
+
 // --- VALIDATION HELPER ---
 const sanitizeText = (text: string): string | null => {
     if (!text) return null;
@@ -170,7 +182,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         // --- STRICT LINEAR ALGORITHM (Fix: No Slots) ---
         // 1. SELECT ATTRACTIONS (2-3)
         // 2. INSERT LUNCH (Restaurant)
-        // 3. ADD 1 ACTIVITY
+        // 3. ADD 1 ACTIVITY (Guaranteed)
         // 4. INSERT DINNER (Restaurant)
 
         let dayActivities = [];
@@ -213,7 +225,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             activity: `Lunch at ${lunchSpot.name}`,
             duration: '90 mins',
             description: `${lunchSpot.cuisine} • ${lunchSpot.area}`,
-            type: 'MEAL', // Typed as MEAL
+            type: 'MEAL' as const, // Typed as MEAL
             mealType: 'lunch' as 'lunch',
             fixed: true,
             cuisine: lunchSpot.cuisine, // ADDED metadata
@@ -221,26 +233,51 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         });
 
 
-        // Step 3: Add 1 more Activity
-        if (pool.length > 0) {
-            const selected = pool.shift();
-            if (selected && !usedPlaceNames.has(selected.name) && !usedPOI_IDs.has(selected.id)) {
-                usedPOI_IDs.add(selected.id);
-                usedPlaceNames.add(selected.name);
+        // Step 3: Add 1 more Activity (ROBUST FILLER)
+        let afternoonActivity: any = null;
 
-                dailyBlocks.push({
-                    id: `block-${Math.random().toString(36).substr(2, 9)}`,
-                    time: '', // REMOVED explicit time
-                    slot: 'afternoon',
-                    activity: `Visit ${selected.name}`,
-                    duration: getDuration(selected.category, selected.name),
-                    description: `Explore ${selected.category}.`,
-                    type: 'ATTRACTION',
-                    fixed: false,
-                    location: selected.location?.zone || selected.location?.name || '',
-                    category: 'Sightseeing'
-                });
-            }
+        // 3a. Try remaining pool
+        if (pool.length > 0) {
+            afternoonActivity = pool.shift();
+        }
+
+        // 3b. Try to find ANY global unused POI
+        if (!afternoonActivity || usedPlaceNames.has(afternoonActivity.name)) {
+            afternoonActivity = mergedPOIs.find(p => !usedPOI_IDs.has(p.id) && !usedPlaceNames.has(p.name));
+        }
+
+        // 3c. Fallback to generic if everything exhausted
+        if (afternoonActivity) {
+            usedPOI_IDs.add(afternoonActivity.id);
+            usedPlaceNames.add(afternoonActivity.name);
+
+            dailyBlocks.push({
+                id: `block-${Math.random().toString(36).substr(2, 9)}`,
+                time: '', // REMOVED explicit time
+                slot: 'afternoon',
+                activity: `Visit ${afternoonActivity.name}`,
+                duration: getDuration(afternoonActivity.category, afternoonActivity.name),
+                description: `Explore ${afternoonActivity.category}.`,
+                type: 'ATTRACTION' as const,
+                fixed: false,
+                location: afternoonActivity.location?.zone || afternoonActivity.location?.name || '',
+                category: 'Sightseeing'
+            });
+        } else {
+            // Generic Fallback
+            const fallback = getFallbackActivity(targetZone);
+            dailyBlocks.push({
+                id: `block-fallback-${Math.random().toString(36).substr(2, 9)}`,
+                time: '',
+                slot: 'afternoon',
+                activity: fallback.name,
+                duration: '60 mins',
+                description: fallback.description,
+                type: 'ATTRACTION' as const,
+                fixed: false,
+                location: fallback.location?.zone || targetZone,
+                category: 'Sightseeing'
+            });
         }
 
         // Step 4: Insert Dinner
@@ -252,7 +289,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             activity: `Dinner at ${dinnerSpot.name}`,
             duration: '90 mins',
             description: `${dinnerSpot.cuisine} • ${dinnerSpot.area}`,
-            type: 'MEAL',
+            type: 'MEAL' as const,
             mealType: 'dinner' as 'dinner',
             fixed: true,
             cuisine: dinnerSpot.cuisine, // ADDED metadata
