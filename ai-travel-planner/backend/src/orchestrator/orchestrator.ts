@@ -292,7 +292,14 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // -------------------
     if (intent.type === 'plan_trip' || ctx.currentState === 'IDLE' || ctx.currentState === 'READY') { // Added READY -> COLLECTING trigger if plan_trip
         if (intent.type === 'plan_trip') {
+            // STRICT RESET: User wants a new plan, so invalidate previous state
+            console.log('[Orchestrator] Starting NEW Plan -> Resetting Constraints');
             ctx.currentState = 'COLLECTING_INFO';
+            ctx.constraintsCollected = false;
+            ctx.planGenerated = false;
+            ctx.itinerary = undefined;
+            // We keep collectedConstraints partially to allow "refinement" if entities are present,
+            // but the 'constraintsCollected' flag being false forces re-validation.
             saveSession(ctx);
         }
     }
@@ -312,8 +319,12 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     if (ctx.currentState === 'COLLECTING_INFO') {
+        // Validation Check - ALWAYS RUN THIS
+        const validationState = validatePlanningContext(ctx);
+
         // Prevent re-entry if already done, unless explicit change requested
-        if (ctx.constraintsCollected && intent.type !== 'CHANGE_PREFERENCES') {
+        // AND validation is actually passing
+        if (ctx.constraintsCollected && intent.type !== 'CHANGE_PREFERENCES' && validationState === 'VALID') {
             ctx.currentState = 'CONFIRMING';
             // Fall through to confirming logic below
         } else {
@@ -352,6 +363,8 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
 
         if (intent.type === 'CONFIRM_GENERATE') {
+            // DOUBLE CHECK: Even if they say "yes", do we have the data?
+            // This prevents "Yes" bypassing the check if state was somehow forced.
             const validationState = validatePlanningContext(ctx);
 
             if (validationState !== 'VALID') {
