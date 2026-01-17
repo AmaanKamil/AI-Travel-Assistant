@@ -29,7 +29,7 @@ function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
             }
         } else {
             // If not a meal but tagged as MEAL, fix it
-            if (b.type === 'MEAL' && !titleValues.includes('lunch') && !titleValues.includes('dinner') && !titleValues.includes('breakfast')) {
+            if (b.type === 'MEAL' && !b.mealType && !titleValues.includes('lunch') && !titleValues.includes('dinner') && !titleValues.includes('breakfast')) {
                 b.type = 'ATTRACTION';
             }
         }

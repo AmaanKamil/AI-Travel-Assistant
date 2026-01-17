@@ -93,9 +93,44 @@ async function runTests() {
         passed++;
     }
 
-    console.log(`\nResult: ${passed}/4 Tests Passed`);
+    // TEST 5: REPLACE MEAL (Lunch)
+    const opReplaceMeal: EditOperation = {
+        intent: EditIntentType.REPLACE_ITEM,
+        sourceDay: 1,
+        itemToMove: "Lunch",
+        rawInstruction: "Replace lunch"
+    };
+    const resReplaceMeal = applyDeterministicEdit(mockItinerary, opReplaceMeal);
+    const newLunch = resReplaceMeal.itinerary.days[0].blocks.find(b => b.mealType === 'lunch');
 
-    if (passed === 4) process.exit(0);
+    if (resReplaceMeal.success && newLunch && newLunch.activity !== "Lunch" && newLunch.type === 'MEAL') {
+        console.log(`PASS: Replace Meal (Changed to ${newLunch.activity})`);
+        passed++;
+    } else {
+        console.error("FAIL: Replace Meal", resReplaceMeal);
+    }
+
+    // TEST 6: REPLACE ATTRACTION
+    const opReplaceAttraction: EditOperation = {
+        intent: EditIntentType.REPLACE_ITEM,
+        sourceDay: 1,
+        itemToMove: "Burj Khalifa",
+        rawInstruction: "Replace Burj Khalifa"
+    };
+    const resReplaceAttr = applyDeterministicEdit(mockItinerary, opReplaceAttraction);
+    // Find missing old item
+    const hasBurj = resReplaceAttr.itinerary.days[0].blocks.find(b => b.activity.includes("Burj Khalifa"));
+
+    if (!hasBurj && resReplaceAttr.message.includes("swapped") && resReplaceAttr.success) {
+        console.log("PASS: Replace Attraction");
+        passed++;
+    } else {
+        console.error("FAIL: Replace Attraction", resReplaceAttr);
+    }
+
+    console.log(`\nResult: ${passed}/6 Tests Passed`);
+
+    if (passed === 6) process.exit(0);
     else process.exit(1);
 }
 

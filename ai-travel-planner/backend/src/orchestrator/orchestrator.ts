@@ -66,6 +66,32 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // Short-circuit for very obvious unrelated non-travel spam if needed,
     // but strict "Dubai" keyword check might be too aggressive for "yes"/"no" answers.
     // We will rely on the prompt to handle "Write me a poem" but we can block known jailbreaks or gibberish here.
+    // ===============================
+    // GLOBAL INTENT OVERRIDE (CRITICAL)
+    // ===============================
+    // 1. EMAIL / EXPORT OVERRIDE
+    // Must trigger from ANY state if intent matches "email" or "send"
+    const lowerInput = userInput.toLowerCase();
+
+    if (
+        lowerInput.includes('email') ||
+        lowerInput.includes('send to my email') || // Specific phrase
+        lowerInput.includes('share this') ||
+        (lowerInput.includes('send') && lowerInput.includes('plan'))
+    ) {
+        console.log('[Orchestrator] GLOBAL OVERRIDE -> EXPORT');
+        ctx.currentState = 'AWAITING_EMAIL_INPUT';
+        saveSession(ctx);
+
+        return {
+            message: 'Please enter your email in the field below and click on the send button.',
+            currentState: 'AWAITING_EMAIL_INPUT',
+            // @ts-ignore - Dynamic property for UI
+            uiAction: 'REQUEST_EMAIL'
+        };
+    }
+    // ===============================
+
     // STRICT STATE GUARD (Email Flow)
     if (ctx.currentState === 'AWAITING_EMAIL_INPUT') {
         // If user says something unrelated, we should probably guide them back or ignore?
@@ -176,6 +202,22 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             return {
                 message: 'Let’s create your trip plan first before editing it.',
                 currentState: ctx.currentState,
+            };
+        }
+
+        // 0. CHECK EXIT CONDITION
+        if (
+            lowerInput.includes('done') ||
+            lowerInput.includes('looks good') ||
+            lowerInput.includes('finished') ||
+            lowerInput === 'ok'
+        ) {
+            ctx.currentState = 'POST_PLAN_READY';
+            saveSession(ctx);
+            return {
+                message: "Great! The plan is ready. You can ask me to email it to you or make more changes.",
+                currentState: 'POST_PLAN_READY',
+                itinerary: ctx.itinerary
             };
         }
 

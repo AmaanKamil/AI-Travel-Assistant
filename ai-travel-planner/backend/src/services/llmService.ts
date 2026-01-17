@@ -60,6 +60,9 @@ export async function extractIntent(text: string, currentState?: string): Promis
             9. "3 days relaxed" -> type="plan_trip", entities={ "days": 3, "pace": "relaxed" }
             10. "Why did you pick this?" -> type="ask_question"
             11. "Email me this" -> type="export"
+            12. "Change lunch on day 2" -> type="edit_itinerary", editOperation={ intent: "REPLACE_ITEM", sourceDay: 2, itemToMove: "Lunch" }
+            13. "Replace Burj Khalifa" -> type="edit_itinerary", editOperation={ intent: "REPLACE_ITEM", sourceDay: 0, itemToMove: "Burj Khalifa" }
+            14. "Done" or "Looks good" -> type="CONFIRM_GENERATE" (or handle as exit)
             
             Ambiguity:
             - If "move X to tomorrow" and current context unknown, set sourceDay=0, targetDay=0 (logic will ask or infer).

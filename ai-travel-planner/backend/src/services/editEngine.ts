@@ -65,6 +65,9 @@ export function applyDeterministicEdit(
         case EditIntentType.REMOVE_ITEM:
             return handleRemoveItem(copy, sourceIdx, operation.itemToMove, operation.sourceDay);
 
+        case EditIntentType.REPLACE_ITEM:
+            return handleReplaceItem(copy, sourceIdx, operation.itemToMove, operation.sourceDay);
+
         default:
             console.warn('[EditEngine] Unknown intent', operation.intent);
             return {
@@ -215,4 +218,58 @@ function handleRemoveItem(itinerary: Itinerary, dayIdx: number, itemName: string
     day.blocks.splice(blockIdx, 1);
 
     return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I've removed ${realName} from Day ${dayNum}.` };
+}
+
+function handleReplaceItem(itinerary: Itinerary, dayIdx: number, itemName: string | undefined, dayNum: number): EditResult {
+    if (dayIdx === -1) return { success: false, itinerary, message: `Day ${dayNum} not found.` };
+    if (!itemName) return { success: false, itinerary, message: "Replace what? I missed the name." };
+
+    const day = itinerary.days[dayIdx];
+    const blockIdx = findBlockIndex(day.blocks, itemName);
+
+    if (blockIdx === -1) return { success: false, itinerary, message: `I couldn't find "${itemName}" in Day ${dayNum}.` };
+
+    const block = day.blocks[blockIdx];
+    const oldName = block.activity;
+
+    // MEAL REPLACEMENT LOGIC
+    if (block.type === 'MEAL' || block.mealType) {
+        const replacements = [
+            "Zuma (Modern Japanese)", "LPM Restaurant (French-Mediterranean)", "Coya (Peruvian)",
+            "Amazonico (Latin American)", "Il Borro (Italian)", "Hutong (Northern Chinese)",
+            "The Maine (Seafood Brasserie)", "Gaia (Greek-Mediterranean)", "Alici (Italian Seafood)"
+        ];
+
+        // Simple rotation to avoid same-day duplicates (real app would have a DB)
+        const currentActivities = new Set(day.blocks.map(b => b.activity));
+        const newRest = replacements.find(r => !currentActivities.has(r) && r !== oldName) || "A Local Hidden Gem";
+
+        block.activity = newRest;
+        block.description = "A highly rated venue chosen for its excellent cuisine and ambiance.";
+        // Keep mealType, time, day intact
+
+        return {
+            success: true,
+            itinerary: validateAndNormalizeItinerary(itinerary),
+            message: `I've replaced ${oldName} with ${newRest}.`
+        };
+    }
+
+    // ATTRACTION REPLACEMENT LOGIC
+    // Determine category based on keywords or simple grouping
+    let replacement = "Dubai Frame";
+    if (oldName.includes("Mall")) replacement = "Souk Madinat Jumeirah";
+    else if (oldName.includes("Museum")) replacement = "Etihad Museum";
+    else if (oldName.includes("Burj")) replacement = "The View at The Palm";
+    else if (oldName.includes("Beach")) replacement = "La Mer";
+    else replacement = "Global Village"; // Generic fallback
+
+    block.activity = replacement;
+    block.description = `An alternative popular attraction similar to ${oldName}.`;
+
+    return {
+        success: true,
+        itinerary: validateAndNormalizeItinerary(itinerary),
+        message: `I've swapped ${oldName} for ${replacement}. Want to try something else?`
+    };
 }
