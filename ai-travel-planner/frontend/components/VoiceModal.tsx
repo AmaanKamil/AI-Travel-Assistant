@@ -104,8 +104,8 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
             if (result.itinerary) {
                 setDisplayItinerary(result.itinerary);
             }
-            if (result.evaluation) {
-                setEvaluations(result.evaluation);
+            if (result.evals) {
+                setEvaluations(result.evals);
             }
             if (result.citations) {
                 setCitations(result.citations);
@@ -260,13 +260,13 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                             </div>
                         ))}
 
-                        {/* Recent Evaluations (Attached to bottom of stream if exists) */}
-                        {(evaluations || citations.length > 0) && (
-                            <div className="space-y-4 pt-4 border-t border-white/5">
-                                {evaluations && <PlanningChecks evaluations={evaluations} />}
-                                <SourcesPanel sources={citations} />
-                            </div>
-                        )}
+                        {/* Recent Evaluations (Attached to bottom of stream if exists) */
+                            /* MOVED TO ITINERARY VIEW FOR PERSISTENCE */
+                            (citations.length > 0) && (
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <SourcesPanel sources={citations} />
+                                </div>
+                            )}
 
                         {/* Pending Transcript (User) */}
                         {pendingTranscript && (
@@ -319,7 +319,7 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
                             </div>
 
                             {/* Itinerary Component */}
-                            <ItineraryView itinerary={displayItinerary} highlightDay={highlightDay} />
+                            <ItineraryView itinerary={displayItinerary} highlightDay={highlightDay} evals={evaluations} />
 
                             {/* EMAIL ACTION */}
                             <div className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">

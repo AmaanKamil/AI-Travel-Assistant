@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Calendar, MapPin, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import PlanningChecks from './PlanningChecks';
 
 interface Activity {
     name: string;
@@ -18,10 +19,18 @@ interface Itinerary {
 interface ItineraryViewProps {
     itinerary: Itinerary;
     highlightDay?: number | null;
+    evals?: any;
 }
 
-const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }) => {
+const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay, evals }) => {
     if (!itinerary || !itinerary.days) return null;
+
+    // Map Backend Evals to Frontend Props
+    const planningChecksData = evals ? {
+        feasibility: { passed: evals.feasibility?.status === 'pass', message: evals.feasibility?.reason },
+        edit_correctness: { passed: evals.editCorrectness?.status === 'pass', message: evals.editCorrectness?.reason },
+        grounding: { passed: evals.grounding?.status === 'pass', message: evals.grounding?.reason }
+    } : undefined;
 
     function mapBlockToActivity(block: any): Activity {
         const isMeal = block.type === 'MEAL' || block.mealType;
@@ -41,6 +50,11 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                 <Calendar className="w-6 h-6 text-blue-500" />
                 <h2 className="text-2xl font-bold text-white tracking-tight">Your Custom Itinerary</h2>
             </div>
+
+            {/* SYSTEM EVALUATIONS (Visible at top) */}
+            {planningChecksData && (
+                <PlanningChecks evaluations={planningChecksData} />
+            )}
 
             <div className="grid gap-8">
                 {itinerary.days.map((dayData, idx) => {
