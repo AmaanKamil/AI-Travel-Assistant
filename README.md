@@ -93,9 +93,6 @@ Used for practical travel guidance including areas to visit, safety tips, etique
 ### Wikipedia
 Used for background context on major attractions and cultural landmarks. Provides historical and descriptive grounding for itinerary explanations.
 
-### Open Meteo API
-Optional dataset used for weather awareness and rainy day adjustments when enabled.
-
 *Note: If any data is missing or unreliable, the system explicitly communicates uncertainty instead of guessing.*
 
 ## Running Evaluations
@@ -124,7 +121,6 @@ Evaluations run automatically and results are surfaced in the UI under the Plann
 ### Transcript 1: Voice Based Planning
 **User**: Plan a 3 day trip to Dubai next weekend. I like food and culture, relaxed pace.
 **Assistant**:
-- Asks clarifying questions about travel dates and daily availability.
 - Confirms constraints.
 - Generates a day wise itinerary.
 - Runs feasibility evaluation and shows Passed.
