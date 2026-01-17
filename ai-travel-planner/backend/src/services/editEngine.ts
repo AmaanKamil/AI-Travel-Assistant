@@ -22,16 +22,23 @@ function cloneItinerary(itinerary: Itinerary): Itinerary {
 
 // --- CORE ENGINE ---
 
+// --- TYPES ---
+export interface EditResult {
+    success: boolean;
+    itinerary: Itinerary;
+    message: string;
+}
+
 export function applyDeterministicEdit(
     itinerary: Itinerary,
     operation: EditOperation
-): Itinerary {
+): EditResult {
     const copy = cloneItinerary(itinerary);
 
     // Safety check: Day bounds
     if (operation.sourceDay < 1 && operation.intent !== EditIntentType.ADD_ITEM) {
         console.warn('[EditEngine] Invalid Source Day 0');
-        return copy;
+        return { success: false, itinerary: copy, message: "I couldn't identify strictly which day you were referring to." };
     }
 
     const sourceIdx = findDayIndex(copy, operation.sourceDay);
@@ -41,86 +48,71 @@ export function applyDeterministicEdit(
 
     switch (operation.intent) {
         case EditIntentType.RELAX_DAY:
-            handleRelaxDay(copy, sourceIdx);
-            break;
+            return handleRelaxDay(copy, sourceIdx, operation.sourceDay);
 
         case EditIntentType.PACK_DAY:
-            handlePackDay(copy, sourceIdx);
-            break;
+            return handlePackDay(copy, sourceIdx, operation.sourceDay);
 
         case EditIntentType.MOVE_ITEM_WITHIN_DAY:
-            handleMoveWithinDay(copy, sourceIdx, operation.itemToMove, operation.targetSlot);
-            break;
+            return handleMoveWithinDay(copy, sourceIdx, operation.itemToMove, operation.targetSlot, operation.sourceDay);
 
         case EditIntentType.MOVE_ITEM_BETWEEN_DAYS:
-            handleMoveBetweenDays(copy, sourceIdx, targetIdx, operation.itemToMove, operation.targetSlot);
-            break;
+            return handleMoveBetweenDays(copy, sourceIdx, targetIdx, operation.itemToMove, operation.targetSlot, operation.sourceDay, operation.targetDay!);
 
         case EditIntentType.SWAP_DAYS:
-            handleSwapDays(copy, sourceIdx, targetIdx);
-            break;
+            return handleSwapDays(copy, sourceIdx, targetIdx, operation.sourceDay, operation.targetDay!);
 
         case EditIntentType.REMOVE_ITEM:
-            handleRemoveItem(copy, sourceIdx, operation.itemToMove);
-            break;
+            return handleRemoveItem(copy, sourceIdx, operation.itemToMove, operation.sourceDay);
 
         default:
             console.warn('[EditEngine] Unknown intent', operation.intent);
+            return {
+                success: false,
+                itinerary: copy,
+                message: "I'm unsure how to perform that specific edit."
+            };
     }
 
-    // FINAL VALIDATION GATE
-    return validateAndNormalizeItinerary(copy);
+    // UNREACHABLE CODE BUT SAFEGUARD
+    return { success: true, itinerary: validateAndNormalizeItinerary(copy), message: "Update complete." };
 }
 
 // --- HANDLERS ---
 
-function handleSwapDays(itinerary: Itinerary, idxA: number, idxB: number) {
-    if (idxA === -1 || idxB === -1) return;
-
-    // Swap blocks only, keep Day ID/Number if needed? 
-    // Usually user wants "Day 1 content" to be on "Day 2".
+function handleSwapDays(itinerary: Itinerary, idxA: number, idxB: number, dayA: number, dayB: number): EditResult {
+    if (idxA === -1 || idxB === -1) {
+        return { success: false, itinerary, message: `I couldn't find Day ${dayA} or Day ${dayB}.` };
+    }
 
     const tempBlocks = [...itinerary.days[idxA].blocks];
     itinerary.days[idxA].blocks = [...itinerary.days[idxB].blocks];
     itinerary.days[idxB].blocks = tempBlocks;
 
-    // Note: Validation will normalize meal slots if necessary, but swapping full days usually preserves structure.
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I've swapped the activities of Day ${dayA} and Day ${dayB}.` };
 }
 
-function handleRelaxDay(itinerary: Itinerary, dayIdx: number) {
-    if (dayIdx === -1) return;
+function handleRelaxDay(itinerary: Itinerary, dayIdx: number, dayNum: number): EditResult {
+    if (dayIdx === -1) return { success: false, itinerary, message: `I couldn't find Day ${dayNum}.` };
     const day = itinerary.days[dayIdx];
 
-    // Identify removable candidates (Non-Meals, Non-Fixed?)
-    // Filter for 'ATTRACTION' logic
     const candidates = day.blocks.filter(b => b.type !== 'MEAL' && !b.mealType && b.type !== 'transfer');
 
-    if (candidates.length === 0) return; // Nothing to remove
+    if (candidates.length === 0) {
+        return { success: false, itinerary, message: `Day ${dayNum} looks pretty relaxed already (mostly meals/transfers).` };
+    }
 
-    // Scoring: Remove the one with longest duration or "intense" keywords?
-    // Simple Heuristic: Remove the last non-dinner attraction (usually least critical) 
-    // OR remove the one with 'hopping' or 'safari' if asking for relax.
-
-    // Let's remove the LAST attraction before Dinner to give more breathing room
-    // Find index of last attraction
     let targetId = candidates[candidates.length - 1].id;
+    const removedName = candidates[candidates.length - 1].activity;
 
     day.blocks = day.blocks.filter(b => b.id !== targetId);
+
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I've made Day ${dayNum} more relaxed by removing ${removedName}.` };
 }
 
-function handlePackDay(itinerary: Itinerary, dayIdx: number) {
-    /* 
-     * Heuristic: "Pack" means add more stuff. 
-     * Since we don't have a "Global Unused Pool" easily accessible here without fetching,
-     * we can try to steal a short activity from another day that has too many,
-     * OR strictly we should fail if we can't find something.
-     * 
-     * For MVP/Stability: We will refrain from inventing hallucinations.
-     * If we can't find a source, we do nothing or add a generic "Walk".
-     */
-    if (dayIdx === -1) return;
+function handlePackDay(itinerary: Itinerary, dayIdx: number, dayNum: number): EditResult {
+    if (dayIdx === -1) return { success: false, itinerary, message: `I couldn't find Day ${dayNum}.` };
 
-    // Generic filler for "Packed" request
     itinerary.days[dayIdx].blocks.push({
         id: `packed-${Date.now()}`,
         activity: "Explore Local Markets",
@@ -130,6 +122,8 @@ function handlePackDay(itinerary: Itinerary, dayIdx: number) {
         duration: '1 hour',
         fixed: false
     });
+
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I've added a market visit to Day ${dayNum} to pack the schedule.` };
 }
 
 function insertAtSlot(blocks: TimeBlock[], block: TimeBlock, slot?: string) {
@@ -167,44 +161,58 @@ function insertAtSlot(blocks: TimeBlock[], block: TimeBlock, slot?: string) {
     }
 }
 
-function handleMoveWithinDay(itinerary: Itinerary, dayIdx: number, itemName?: string, targetSlot?: string) {
-    if (dayIdx === -1 || !itemName) return;
-    const day = itinerary.days[dayIdx];
+function handleMoveWithinDay(itinerary: Itinerary, dayIdx: number, itemName: string | undefined, targetSlot: string | undefined, dayNum: number): EditResult {
+    if (dayIdx === -1) return { success: false, itinerary, message: `Day ${dayNum} not found.` };
+    if (!itemName) return { success: false, itinerary, message: "I didn't catch which place you want to move." };
 
+    const day = itinerary.days[dayIdx];
     const blockIdx = findBlockIndex(day.blocks, itemName);
-    if (blockIdx === -1) return;
+
+    if (blockIdx === -1) return { success: false, itinerary, message: `I couldn't find "${itemName}" in Day ${dayNum}.` };
 
     const [block] = day.blocks.splice(blockIdx, 1);
+    const realName = block.activity;
 
     insertAtSlot(day.blocks, block, targetSlot);
+
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I moved ${realName} ${targetSlot ? 'to ' + targetSlot : 'as requested'} on Day ${dayNum}.` };
 }
 
-function handleMoveBetweenDays(itinerary: Itinerary, srcIdx: number, tgtIdx: number, itemName?: string, targetSlot?: string) {
-    if (srcIdx === -1 || tgtIdx === -1 || !itemName) return;
+function handleMoveBetweenDays(itinerary: Itinerary, srcIdx: number, tgtIdx: number, itemName: string | undefined, targetSlot: string | undefined, srcDayNum: number, tgtDayNum: number): EditResult {
+    if (srcIdx === -1) return { success: false, itinerary, message: `I couldn't find Day ${srcDayNum}.` };
+    if (tgtIdx === -1) return { success: false, itinerary, message: `I couldn't find target Day ${tgtDayNum}.` };
+    if (!itemName) return { success: false, itinerary, message: "I didn't catch the place name." };
 
     const srcDay = itinerary.days[srcIdx];
     const tgtDay = itinerary.days[tgtIdx];
 
     const blockIdx = findBlockIndex(srcDay.blocks, itemName);
-    if (blockIdx === -1) return;
+    if (blockIdx === -1) return { success: false, itinerary, message: `I couldn't find "${itemName}" in Day ${srcDayNum}.` };
 
     const [block] = srcDay.blocks.splice(blockIdx, 1);
+    const realName = block.activity;
 
     insertAtSlot(tgtDay.blocks, block, targetSlot || 'afternoon');
+
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I moved ${realName} from Day ${srcDayNum} to Day ${tgtDayNum}.` };
 }
 
-function handleRemoveItem(itinerary: Itinerary, dayIdx: number, itemName?: string) {
-    if (dayIdx === -1 || !itemName) return;
-    const day = itinerary.days[dayIdx];
+function handleRemoveItem(itinerary: Itinerary, dayIdx: number, itemName: string | undefined, dayNum: number): EditResult {
+    if (dayIdx === -1) return { success: false, itinerary, message: `Day ${dayNum} not found.` };
+    if (!itemName) return { success: false, itinerary, message: "Name of place to remove is missing." };
 
+    const day = itinerary.days[dayIdx];
     const blockIdx = findBlockIndex(day.blocks, itemName);
-    if (blockIdx === -1) return;
+
+    if (blockIdx === -1) return { success: false, itinerary, message: `I couldn't find "${itemName}" in Day ${dayNum}.` };
 
     const block = day.blocks[blockIdx];
     if (block.type === 'MEAL' || block.mealType) {
-        // PROTECT MEALS
-        return;
+        return { success: false, itinerary, message: `I cannot remove meals (${block.activity}), but I can replace them if you edit manually.` };
     }
 
+    const realName = block.activity;
     day.blocks.splice(blockIdx, 1);
+
+    return { success: true, itinerary: validateAndNormalizeItinerary(itinerary), message: `I've removed ${realName} from Day ${dayNum}.` };
 }

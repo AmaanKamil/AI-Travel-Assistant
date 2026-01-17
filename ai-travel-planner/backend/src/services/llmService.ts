@@ -55,9 +55,11 @@ export async function extractIntent(text: string, currentState?: string): Promis
             3. "Move Burj Khalifa to day 4" -> type="edit_itinerary", editOperation={ intent: "MOVE_ITEM_BETWEEN_DAYS", itemToMove: "Burj Khalifa", sourceDay: 0, targetDay: 4 }
             4. "Move Lunch to 7pm" -> type="edit_itinerary", editOperation={ intent: "MOVE_ITEM_WITHIN_DAY", itemToMove: "Lunch", targetSlot: "evening" }
             5. "Swap day 1 and 2" -> type="edit_itinerary", editOperation={ intent: "SWAP_DAYS", sourceDay: 1, targetDay: 2 }
-            6. "3 days relaxed" -> type="plan_trip", entities={ "days": 3, "pace": "relaxed" }
-            7. "Why did you pick this?" -> type="ask_question"
-            8. "Email me this" -> type="export"
+            7. "Reorder day 1" -> type="edit_itinerary", editOperation={ intent: "REORDER_DAY", sourceDay: 1 } (Mapping to internal logic)
+            8. "Remove Burj Khalifa" -> type="edit_itinerary", editOperation={ intent: "REMOVE_ITEM", itemToMove: "Burj Khalifa", sourceDay: 0 }
+            9. "3 days relaxed" -> type="plan_trip", entities={ "days": 3, "pace": "relaxed" }
+            10. "Why did you pick this?" -> type="ask_question"
+            11. "Email me this" -> type="export"
             
             Ambiguity:
             - If "move X to tomorrow" and current context unknown, set sourceDay=0, targetDay=0 (logic will ask or infer).
@@ -109,6 +111,19 @@ export async function extractIntent(text: string, currentState?: string): Promis
             editOperation: {
                 intent: EditIntentType.RELAX_DAY,
                 sourceDay: parseInt(text.match(/day (\d+)/i)?.[1] || '1'),
+                rawInstruction: text
+            }
+        };
+    }
+
+    if (lower.includes('remove') || lower.includes('delete')) {
+        return {
+            type: 'edit_itinerary',
+            entities: {},
+            editOperation: {
+                intent: EditIntentType.REMOVE_ITEM,
+                sourceDay: parseInt(text.match(/day (\d+)/i)?.[1] || '0'),
+                itemToMove: text.replace(/remove|delete|from day \d+/gi, '').trim(),
                 rawInstruction: text
             }
         };

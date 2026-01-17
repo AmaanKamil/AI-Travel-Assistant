@@ -105,68 +105,16 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     );
 
     // ===============================
-    // HARD POST-PLAN ROUTING
     // ===============================
-    if (ctx.planGenerated) {
+    // ===============================
+    // SAFE STATE ENFORCEMENT
+    // ===============================
+    if (ctx.currentState === 'POST_PLAN_READY') {
+        // Strict allow-list for post-plan intents
         const text = userInput.toLowerCase();
-        console.log('[POST PLAN MODE] Incoming:', text);
 
-        // ---- EXPLAIN ----
-        if (text.includes('why')) {
-            console.log('→ Routing to EXPLAIN');
-
-            const answer = await explainService.explainPlace(
-                text,
-                ctx.itinerary
-            );
-
-            return {
-                message: answer,
-                currentState: 'READY'
-            };
-        }
-
-        // ---- EDIT (LEGACY BLOCK REMOVED) ----
-        // Routed via extractIntent() later in the flow
-        if (
-            text.includes('change') ||
-            text.includes('edit') ||
-            text.includes('swap') ||
-            text.includes('make')
-        ) {
-            // Fall through to LLM for precise intent
-            console.log('→ Routing to EDIT (via LLM)');
-        }
-
-        // ---- EXPORT ----
-        if (
-            text.includes('email') ||
-            text.includes('send') ||
-            text.includes('pdf') ||
-            text.includes('share') ||
-            text.includes('mail')
-        ) {
-            console.log('→ Routing to EXPORT (UI Trigger)');
-
-            // UX FIX: Do not ask for email via voice.
-            // Do not send email here. 
-            // Trigger UI mode only.
-
-            ctx.currentState = 'AWAITING_EMAIL_INPUT';
-            saveSession(ctx);
-
-            return {
-                message: 'Please enter your email in the field below and click on the send button.',
-                currentState: 'AWAITING_EMAIL_INPUT',
-                // @ts-ignore - Dynamic property for UI
-                uiAction: 'REQUEST_EMAIL'
-            };
-        }
-        // ---- DEFAULT POST PLAN ----
-        return {
-            message: 'You can ask me to explain, edit, or email your itinerary.',
-            currentState: 'READY'
-        };
+        // Let extractIntent handle specific classifications, but block new "plan_trip" unless explicit "start over"
+        // For now, we rely on extractIntent to classify correctly.
     }
     // ===============================
     // END HARD ROUTING
@@ -181,7 +129,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // -------------------
     // POST-PLAN ROUTER
     // -------------------
-    if (ctx.planGenerated && ctx.currentState === 'READY') {
+    if (ctx.planGenerated && (ctx.currentState === 'READY' || ctx.currentState === 'POST_PLAN_READY')) {
         const command = routePostPlanCommand(userInput);
 
         console.log('[POST PLAN CMD]', command);
@@ -235,28 +183,36 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         if (intent.editOperation) {
             console.log('[Orchestrator] Applying Edit:', intent.editOperation);
 
-            const updated = applyDeterministicEdit(ctx.itinerary, intent.editOperation);
+            const result = applyDeterministicEdit(ctx.itinerary, intent.editOperation);
 
-            // 2. Gate Check (Post-Edit Integrity)
-            const coreState = toCoreState(updated);
-            const normalizedState = reconstructItinerary(coreState);
-            ItineraryGate.verify(normalizedState);
+            if (result.success) {
+                // 2. Gate Check (Post-Edit Integrity)
+                const coreState = toCoreState(result.itinerary);
+                const normalizedState = reconstructItinerary(coreState);
+                ItineraryGate.verify(normalizedState);
 
-            ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary.title);
-            ctx.currentState = 'READY';
-            saveSession(ctx);
+                ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary.title);
+                ctx.currentState = 'POST_PLAN_READY'; // Active state
+                saveSession(ctx);
 
-            return {
-                message: `Done. I've updated your itinerary based on your request.`,
-                itinerary: ctx.itinerary,
-                currentState: 'READY',
-            };
+                return {
+                    message: `${result.message} Want to adjust anything else?`,
+                    itinerary: ctx.itinerary,
+                    currentState: 'POST_PLAN_READY', // Frontend needs this to stay in "View/Chat" mode
+                };
+            } else {
+                // Failed Edit
+                return {
+                    message: result.message || "I couldn't make that edit. Please try being more specific.",
+                    currentState: 'POST_PLAN_READY'
+                };
+            }
         } else {
             // Fallback if LLM missed it but Router caught it (Should be rare with new LLM logic)
             console.warn('[Orchestrator] Edit State but no EditOperation.');
             return {
                 message: 'I understood you want to edit, but I am not sure what specific change you want. Try "Make day 1 relaxed" or "Swap day 1 and 2".',
-                currentState: 'READY'
+                currentState: 'POST_PLAN_READY'
             };
         }
     }
@@ -382,14 +338,14 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 }
 
                 ctx.planGenerated = true;
-                ctx.currentState = 'READY';
+                ctx.currentState = 'POST_PLAN_READY';
                 saveSession(ctx);
 
                 return {
                     message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
                     itinerary: ctx.itinerary,
                     session_id: ctx.sessionId,
-                    currentState: 'READY'
+                    currentState: 'POST_PLAN_READY'
                 };
             }
         }

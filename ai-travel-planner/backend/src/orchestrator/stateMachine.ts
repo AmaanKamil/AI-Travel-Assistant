@@ -2,6 +2,7 @@ export type OrchestratorState =
     | 'IDLE'
     | 'COLLECTING_INFO' // Replaces CLARIFYING
     | 'CONFIRMING'
+    | 'POST_PLAN_READY'
     | 'PLANNING'
     | 'READY'          // Replaces PRESENTING/EVALUATING
     | 'EDITING'
