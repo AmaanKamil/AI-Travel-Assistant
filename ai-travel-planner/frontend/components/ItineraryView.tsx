@@ -46,7 +46,14 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                 {itinerary.days.map((dayData, idx) => {
                     const dayNumber = dayData.day || (idx + 1);
                     const isHighlighted = highlightDay === dayNumber;
-                    const activities = (dayData.blocks || []).map(mapBlockToActivity);
+
+                    // Group by Time of Day
+                    const timeGroups: Record<string, any[]> = { 'Morning': [], 'Afternoon': [], 'Evening': [] };
+                    (dayData.blocks || []).forEach((b: any) => {
+                        const slot = b.timeOfDay || 'Morning';
+                        if (timeGroups[slot]) timeGroups[slot].push(b);
+                        else timeGroups['Morning'].push(b);
+                    });
 
                     return (
                         <div
@@ -68,35 +75,73 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                                     </h3>
                                 </div>
 
-                                <div className="space-y-4">
-                                    {activities.map((activity: Activity, aIdx: number) => (
-                                        <div
-                                            key={aIdx}
-                                            className="relative pl-6 border-l-2 border-white/5 last:border-0 hover:border-blue-500/50 transition-colors"
-                                        >
-                                            <div className="absolute -left-[9px] top-2 w-4 h-4 rounded-full bg-gray-800 border-2 border-white/10 group-hover:border-blue-500/30 transition-colors" />
+                                <div className="space-y-8">
+                                    {['Morning', 'Afternoon', 'Evening'].map((slot) => {
+                                        const items = timeGroups[slot];
+                                        if (!items || items.length === 0) return null;
 
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
-                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                    <div>
-                                                        <h5 className="font-medium text-white">{activity.name}</h5>
+                                        return (
+                                            <div key={slot} className="relative">
+                                                {/* TIME SLOT HEADER */}
+                                                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 border-b border-white/5 pb-2">
+                                                    {slot}
+                                                </h4>
 
-                                                        {activity.cuisine ? (
-                                                            <div className="text-sm text-blue-400 italic mb-1">Cuisine: {activity.cuisine}</div>
-                                                        ) : activity.description ? (
-                                                            <div className="text-sm text-gray-400 mb-1">{activity.description}</div>
-                                                        ) : null}
+                                                <div className="space-y-6">
+                                                    {items.map((block: any, bIdx: number) => {
+                                                        const activity = mapBlockToActivity(block);
 
-                                                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                                                            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                                                                {activity.category}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                        return (
+                                                            <div key={bIdx} className="relative">
+                                                                {/* TRAVEL TIME (rendered before item if exists) */}
+                                                                {block.travelTime && (
+                                                                    <div className="flex items-center gap-2 text-xs text-gray-500 italic mb-3 ml-2">
+                                                                        <div className="h-4 w-0.5 bg-gray-800"></div>
+                                                                        <span>↓ {block.travelTime}</span>
+                                                                    </div>
+                                                                )}
+
+                                                                {/* ITEM CARD */}
+                                                                <div className="relative pl-6 border-l-2 border-white/5 hover:border-blue-500/50 transition-colors">
+                                                                    <div className="absolute -left-[9px] top-6 w-4 h-4 rounded-full bg-gray-800 border-2 border-white/10 group-hover:border-blue-500/30 transition-colors" />
+
+                                                                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
+                                                                        <div className="flex flex-col gap-2">
+                                                                            <div className="flex justify-between items-start">
+                                                                                <h5 className="font-medium text-white text-lg">{activity.name}</h5>
+                                                                                {block.duration && (
+                                                                                    <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
+                                                                                        {block.duration}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+
+                                                                            {activity.cuisine ? (
+                                                                                <div className="text-sm text-blue-400 italic">Cuisine: {activity.cuisine}</div>
+                                                                            ) : activity.description ? (
+                                                                                <div className="text-sm text-gray-400">{activity.description}</div>
+                                                                            ) : null}
+
+                                                                            <div className="flex items-center justify-between mt-2">
+                                                                                <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20">
+                                                                                    {activity.category}
+                                                                                </span>
+                                                                                {block.source && (
+                                                                                    <span className="text-[10px] text-gray-600">
+                                                                                        Source: {block.source}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

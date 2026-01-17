@@ -23,4 +23,7 @@ export interface TimeBlock {
     category?: string;
     isFlexible?: boolean;
     fixed?: boolean;
+    timeOfDay?: 'Morning' | 'Afternoon' | 'Evening';
+    travelTime?: string;
+    source?: string;
 }

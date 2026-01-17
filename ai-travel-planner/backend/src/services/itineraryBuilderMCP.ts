@@ -101,7 +101,14 @@ const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
-    return ""; // Completely removed per requirements
+    if (!prevLoc || !currLoc) return "";
+
+    // Heuristic: Same zone = shorter
+    const zone1 = prevLoc.zone || prevLoc; // handle string or object
+    const zone2 = currLoc.zone || currLoc;
+
+    if (zone1 === zone2) return "15-30 mins by car";
+    return "30-60 mins by car";
 };
 
 const getDuration = (category: string, name: string): string => {
@@ -109,16 +116,14 @@ const getDuration = (category: string, name: string): string => {
     const lcName = name.toLowerCase();
 
     // Iconic rules
-    if (lcName.includes('burj') || lcName.includes('frame') || lcName.includes('future')) return '3 hours';
-    if (lcName.includes('atlantis')) return '3 hours';
+    if (lcName.includes('burj') || lcName.includes('frame') || lcName.includes('future') || lcName.includes('atlantis')) return '2-3 hours';
 
     // Category rules
-    if (cat.includes('mall') || cat.includes('souk')) return '2.5 hours';
-    if (cat.includes('museum')) return '90 mins';
-    if (cat.includes('safari')) return '5 hours';
-    if (cat.includes('walk') || cat.includes('fahidi')) return '2 hours';
+    if (cat.includes('mall') || cat.includes('souk')) return '2-3 hours';
+    if (cat.includes('museum') || cat.includes('safari')) return '2-4 hours';
+    if (cat.includes('walk') || cat.includes('fahidi')) return '1-2 hours';
 
-    return '90 mins'; // Default
+    return '1-2 hours'; // Default
 };
 
 // --- FAMOUS POIS (Fix 3: Seeding) ---
@@ -201,7 +206,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             type: 'ATTRACTION' as const,
             fixed: false,
             location: poi.location?.zone || poi.location?.name || '',
-            category: 'Sightseeing' // UI fallback
+            category: 'Sightseeing',
+            source: 'OpenStreetMap / Wikivoyage', // Default source
+            timeOfDay: 'Morning' as 'Morning'
         })));
 
         // Step 2: Insert Lunch
@@ -215,7 +222,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             mealType: 'lunch' as 'lunch',
             fixed: true,
             cuisine: lunchSpot.cuisine, // ADDED metadata
-            category: 'Meal'
+            category: 'Meal',
+            source: 'Google Places / Tripadvisor',
+            timeOfDay: 'Afternoon' as 'Afternoon'
         });
 
 
@@ -245,7 +254,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 type: 'ATTRACTION' as const,
                 fixed: false,
                 location: afternoonActivity.location?.zone || afternoonActivity.location?.name || '',
-                category: 'Sightseeing'
+                category: 'Sightseeing',
+                source: 'OpenStreetMap / Wikivoyage',
+                timeOfDay: 'Afternoon' as 'Afternoon'
             });
         } else {
             // Generic Fallback
@@ -258,7 +269,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 type: 'ATTRACTION' as const,
                 fixed: false,
                 location: fallback.location?.zone || targetZone,
-                category: 'Sightseeing'
+                category: 'Sightseeing',
+                source: 'Public Travel Guides',
+                timeOfDay: 'Afternoon' as 'Afternoon'
             });
         }
 
@@ -273,7 +286,9 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             mealType: 'dinner' as 'dinner',
             fixed: true,
             cuisine: dinnerSpot.cuisine, // ADDED metadata
-            category: 'Meal'
+            category: 'Meal',
+            source: 'Google Places / Tripadvisor',
+            timeOfDay: 'Evening' as 'Evening'
         });
 
         plans.push({ day: i, blocks: dailyBlocks });

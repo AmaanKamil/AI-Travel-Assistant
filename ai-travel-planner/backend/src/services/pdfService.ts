@@ -78,43 +78,95 @@ export async function generatePDF(itinerary: Itinerary): Promise<string> {
 
                 doc.moveDown(0.4);
 
-                day.blocks.forEach((block: any, blockIdx: number) => {
-                    const isMeal = block.type === 'MEAL' || block.mealType;
-                    const typeLabel = isMeal ? 'Meal' : 'Attraction';
+                // Group Blocks by Time of Day
+                const timeGroups: Record<string, any[]> = { 'Morning': [], 'Afternoon': [], 'Evening': [] };
 
-                    // Safety Check: If we are deep at the bottom, move down to trigger auto-paging
-                    if (doc.y > doc.page.height - 60) {
-                        doc.moveDown(1);
+                day.blocks.forEach((b: any) => {
+                    if (b.timeOfDay && timeGroups[b.timeOfDay]) {
+                        timeGroups[b.timeOfDay].push(b);
+                    } else {
+                        // Fallback logic if timeOfDay is missing (should verify validation if this happens often)
+                        timeGroups['Morning'].push(b);
                     }
+                });
 
-                    const currentY = doc.y;
+                // Render Groups
+                ['Morning', 'Afternoon', 'Evening'].forEach((slot) => {
+                    const items = timeGroups[slot];
+                    if (items.length === 0) return;
 
-                    // Bullet & Title
-                    doc.fillColor(colors.text)
-                        .fontSize(12)
-                        .font('Helvetica-Bold')
-                        .text(`• ${block.activity}`, 40, currentY, { continued: true });
+                    // Slot Header
+                    if (doc.y > doc.page.height - 60) doc.moveDown(1);
 
-                    // Type Badge (Inline)
-                    doc.fillColor(isMeal ? '#059669' : colors.accent)
-                        .fontSize(9)
-                        .font('Helvetica-Bold')
-                        .text(`  [${typeLabel.toUpperCase()}]`, { continued: false });
-
-                    doc.moveDown(0.1);
-
-                    // Content: Cuisine or Description
+                    doc.moveDown(0.5);
                     doc.fillColor(colors.secondary)
                         .fontSize(10)
-                        .font(isMeal ? 'Helvetica-Oblique' : 'Helvetica');
+                        .font('Helvetica-Bold')
+                        .text(slot.toUpperCase(), { underline: false });
+                    doc.moveDown(0.2);
 
-                    if (isMeal && block.cuisine) {
-                        doc.text(`  Cuisine: ${block.cuisine}`, 55);
-                    } else if (block.description) {
-                        doc.text(`  ${block.description}`, 55, doc.y, { width: 480 });
-                    }
+                    items.forEach((block: any, blockIdx: number) => {
+                        const isMeal = block.type === 'MEAL' || block.mealType;
+                        const typeLabel = isMeal ? 'Meal' : 'Attraction';
 
-                    doc.moveDown(0.6);
+                        // Safety Check
+                        if (doc.y > doc.page.height - 60) doc.moveDown(1);
+
+                        // TRAVEL TIME (Render BEFORE item if exists)
+                        if (block.travelTime) {
+                            doc.fillColor('#6b7280') // Gray 500
+                                .fontSize(8)
+                                .font('Helvetica-Oblique')
+                                .text(`  ↓ ${block.travelTime}`, 55);
+                            doc.moveDown(0.2);
+                        }
+
+                        const currentY = doc.y;
+
+                        // Bullet & Title
+                        doc.fillColor(colors.text)
+                            .fontSize(12)
+                            .font('Helvetica-Bold')
+                            .text(`• ${block.activity}`, 40, currentY, { continued: true });
+
+                        // Type Badge & Duration
+                        doc.fillColor(isMeal ? '#059669' : colors.accent)
+                            .fontSize(9)
+                            .font('Helvetica-Bold')
+                            .text(`  [${typeLabel.toUpperCase()}]`, { continued: true });
+
+                        if (block.duration) {
+                            doc.fillColor(colors.secondary)
+                                .font('Helvetica')
+                                .text(` • ${block.duration}`, { continued: false });
+                        } else {
+                            doc.text('', { continued: false }); // newline
+                        }
+
+                        doc.moveDown(0.1);
+
+                        // Content: Cuisine or Description
+                        doc.fillColor(colors.secondary)
+                            .fontSize(10)
+                            .font(isMeal ? 'Helvetica-Oblique' : 'Helvetica');
+
+                        if (isMeal && block.cuisine) {
+                            doc.text(`  Cuisine: ${block.cuisine}`, 55);
+                        } else if (block.description) {
+                            doc.text(`  ${block.description}`, 55, doc.y, { width: 480 });
+                        }
+
+                        // Source (Small Footer)
+                        if (block.source) {
+                            doc.moveDown(0.1);
+                            doc.fillColor('#9ca3af')
+                                .fontSize(7)
+                                .font('Helvetica')
+                                .text(`  Source: ${block.source}`, 55);
+                        }
+
+                        doc.moveDown(0.6);
+                    });
                 });
 
                 if (dayIdx < itinerary.days.length - 1) {

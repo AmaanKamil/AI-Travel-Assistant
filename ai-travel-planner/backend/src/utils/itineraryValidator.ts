@@ -39,17 +39,56 @@ function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
         b.slot = undefined;
     });
 
-    // --- STEP 2: MEAL UNIQUENESS (Preserve input order) ---
-    const found = { lunch: false, dinner: false, breakfast: false };
+    // --- STEP 2: STRUCTURE & REBALANCING (Morning / Afternoon / Evening) ---
     const uniqueBlocks: TimeBlock[] = [];
+    const found = { lunch: false, dinner: false, breakfast: false };
 
+    // Deduplication First
     for (const b of valid) {
         if (b.type === 'MEAL' && b.mealType) {
-            if (found[b.mealType]) continue; // Skip duplicates
+            if (found[b.mealType]) continue;
             found[b.mealType] = true;
         }
         uniqueBlocks.push(b);
     }
+
+    // Assign Time Slots based on Anchors
+    let currentSlot: 'Morning' | 'Afternoon' | 'Evening' = 'Morning';
+
+    uniqueBlocks.forEach((b, idx) => {
+        // LUNCH triggers Afternoon (Inclusive)
+        if (b.type === 'MEAL' && b.mealType === 'lunch') {
+            currentSlot = 'Afternoon';
+        }
+        // DINNER triggers Evening (Inclusive)
+        if (b.type === 'MEAL' && b.mealType === 'dinner') {
+            currentSlot = 'Evening';
+        }
+
+        b.timeOfDay = currentSlot;
+
+        // INJECT TRAVEL TIME
+        if (idx > 0) {
+            const prev = uniqueBlocks[idx - 1];
+            // Simple heuristic lookup or default
+            // If location strings differ, assume travel needed
+            const loc1 = prev.location || 'City';
+            const loc2 = b.location || 'City';
+
+            if (loc1 !== loc2) {
+                b.travelTime = "30-60 mins by car";
+            } else {
+                b.travelTime = "15-30 mins by car";
+            }
+        } else {
+            b.travelTime = undefined; // First item has no travel time to it
+        }
+
+        // Ensure Source is present
+        if (!b.source) {
+            b.source = b.type === 'MEAL' ? 'Google Places / Tripadvisor' : 'OpenStreetMap / Wikivoyage';
+        }
+    });
 
     return uniqueBlocks;
 }
