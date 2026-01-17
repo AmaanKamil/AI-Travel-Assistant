@@ -50,7 +50,10 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                     // Group by Time of Day
                     const timeGroups: Record<string, any[]> = { 'Morning': [], 'Afternoon': [], 'Evening': [] };
                     (dayData.blocks || []).forEach((b: any) => {
-                        const slot = b.timeOfDay || 'Morning';
+                        const rawSlot = b.timeOfDay || 'Morning';
+                        // Normalize casing (e.g. 'morning' -> 'Morning')
+                        const slot = rawSlot.charAt(0).toUpperCase() + rawSlot.slice(1).toLowerCase();
+
                         if (timeGroups[slot]) timeGroups[slot].push(b);
                         else timeGroups['Morning'].push(b);
                     });

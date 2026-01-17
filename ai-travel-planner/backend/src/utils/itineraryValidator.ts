@@ -52,10 +52,32 @@ function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
         uniqueBlocks.push(b);
     }
 
+    // --- DURATION HELPER ---
+    const getDuration = (category: string, name: string, isMeal: boolean): string => {
+        const cat = (category || '').toLowerCase();
+        const lcName = (name || '').toLowerCase();
+
+        if (isMeal || cat.includes('meal') || lcName.includes('lunch') || lcName.includes('dinner')) {
+            return '45 mins';
+        }
+
+        // Iconic rules
+        if (lcName.includes('burj') || lcName.includes('frame') || lcName.includes('future') || lcName.includes('atlantis')) return '2-3 hours';
+
+        // Category rules
+        if (cat.includes('mall') || cat.includes('souk')) return '2-3 hours';
+        if (cat.includes('museum') || cat.includes('safari')) return '2-4 hours';
+        if (cat.includes('walk') || cat.includes('fahidi')) return '1-2 hours';
+
+        return '1-2 hours'; // Default
+    };
+
     // Assign Time Slots based on Anchors
     let currentSlot: 'Morning' | 'Afternoon' | 'Evening' = 'Morning';
 
     uniqueBlocks.forEach((b, idx) => {
+        const isMeal = b.type === 'MEAL' || !!b.mealType;
+
         // LUNCH triggers Afternoon (Inclusive)
         if (b.type === 'MEAL' && b.mealType === 'lunch') {
             currentSlot = 'Afternoon';
@@ -67,11 +89,14 @@ function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
 
         b.timeOfDay = currentSlot;
 
+        // FORCE UPDATE DURATION (Fix Legacy Plans)
+        // We always re-calculate to ensure consistency ("2-3 hours", "45 mins")
+        // avoiding "120 mins" etc.
+        b.duration = getDuration(b.category || '', b.activity, isMeal);
+
         // INJECT TRAVEL TIME
         if (idx > 0) {
             const prev = uniqueBlocks[idx - 1];
-            // Simple heuristic lookup or default
-            // If location strings differ, assume travel needed
             const loc1 = prev.location || 'City';
             const loc2 = b.location || 'City';
 
@@ -81,12 +106,12 @@ function normalizeDayBlocks(blocks: TimeBlock[]): TimeBlock[] {
                 b.travelTime = "15-30 mins by car";
             }
         } else {
-            b.travelTime = undefined; // First item has no travel time to it
+            b.travelTime = undefined;
         }
 
         // Ensure Source is present
         if (!b.source) {
-            b.source = b.type === 'MEAL' ? 'Google Places / Tripadvisor' : 'OpenStreetMap / Wikivoyage';
+            b.source = isMeal ? 'Google Places / Tripadvisor' : 'OpenStreetMap / Wikivoyage';
         }
     });
 

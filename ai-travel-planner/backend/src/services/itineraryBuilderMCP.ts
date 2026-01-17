@@ -216,7 +216,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         dailyBlocks.push({
             id: `block-lunch-${i}`,
             activity: `Lunch at ${lunchSpot.name}`,
-            duration: '90 mins',
+            duration: '45 mins',
             description: `${lunchSpot.cuisine} • ${lunchSpot.area}`,
             type: 'MEAL' as const, // Typed as MEAL
             mealType: 'lunch' as 'lunch',
@@ -280,7 +280,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         dailyBlocks.push({
             id: `block-dinner-${i}`,
             activity: `Dinner at ${dinnerSpot.name}`,
-            duration: '90 mins',
+            duration: '45 mins',
             description: `${dinnerSpot.cuisine} • ${dinnerSpot.area}`,
             type: 'MEAL' as const,
             mealType: 'dinner' as 'dinner',
