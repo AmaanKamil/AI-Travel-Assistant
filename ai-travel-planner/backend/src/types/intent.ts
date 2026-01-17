@@ -1,3 +1,5 @@
+import { EditOperation } from './edit';
+
 export interface Intent {
     type: 'plan_trip' | 'edit_itinerary' | 'ask_question' | 'export' | 'CONFIRM_GENERATE' | 'SYSTEM_BOOT' | 'CHANGE_PREFERENCES';
     entities?: {
@@ -6,12 +8,6 @@ export interface Intent {
         interests?: string[];
         constraints?: string[];
     };
-    editIntent?: EditIntent;
-}
-
-export interface EditIntent {
-    target_day: number | null;
-    target_block: 'morning' | 'afternoon' | 'evening' | null;
-    change_type: 'make_more_relaxed' | 'swap_activity' | 'add_place' | 'reduce_travel_time' | 'other';
-    raw_instruction: string;
+    editIntent?: any; // Deprecate gradually
+    editOperation?: EditOperation; // NEW STRICT OPERATION
 }

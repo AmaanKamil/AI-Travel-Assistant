@@ -10,7 +10,7 @@ import { getGroundedAnswer } from '../services/ragService';
 import { applyDeterministicEdit } from '../services/editEngine';
 import { routePostPlanCommand } from './postPlanRouter';
 import { explainService } from '../services/explainService';
-import * as editEngine from '../services/editEngineWrapper';
+// REMOVED: import * as editEngine from '../services/editEngineWrapper';
 import { pdfService } from '../services/pdfService';
 import { emailService } from '../services/emailService';
 
@@ -114,37 +114,16 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             };
         }
 
-        // ---- EDIT ----
+        // ---- EDIT (LEGACY BLOCK REMOVED) ----
+        // Routed via extractIntent() later in the flow
         if (
             text.includes('change') ||
             text.includes('edit') ||
-            text.includes('make') ||
             text.includes('swap') ||
-            text.includes('remove') ||
-            text.includes('add')
+            text.includes('make')
         ) {
-            console.log('→ Routing to EDIT');
-
-            const updated = await editEngine.applyEdit(
-                text,
-                ctx.itinerary! // Itinerary must exist if planGenerated is true
-            );
-
-
-            // STRICT RECONSTRUCTION GATE
-            const coreState = toCoreState(updated);
-            const normalizedState = reconstructItinerary(coreState);
-            ItineraryGate.verify(normalizedState); // <--- HARD GATE
-
-            ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary?.title || "Itinerary");
-
-            saveSession(ctx);
-
-            return {
-                message: 'I’ve updated your itinerary.',
-                itinerary: updated,
-                currentState: 'READY'
-            };
+            // Fall through to LLM for precise intent
+            console.log('→ Routing to EDIT (via LLM)');
         }
 
         // ---- EXPORT ----
@@ -229,6 +208,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // -------------------
     // EDIT FLOW
     // -------------------
+    // -------------------
+    // EDIT FLOW
+    // -------------------
     if (ctx.currentState === 'EDITING') {
         if (!ctx.itinerary) {
             return {
@@ -237,33 +219,34 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             };
         }
 
-        // Adapted to use intent or specific edit parsing since we are in EDITING state forced by router
-        // For now, re-using existing logic or simple adapter if intent extracted
-        const editIntent = {
-            change: 'relax', // Fallback, real implementation should use LLM or regex from user input if routePostPlanCommand identified it
-            day: 2
-        } as any;
+        // 1. Valid Edit Operation from LLM?
+        if (intent.editOperation) {
+            console.log('[Orchestrator] Applying Edit:', intent.editOperation);
 
-        // Better: Use LLM intent if available, otherwise heuristic
-        if (intent.type === 'edit_itinerary' && intent.editIntent) {
-            Object.assign(editIntent, intent.editIntent);
+            const updated = applyDeterministicEdit(ctx.itinerary, intent.editOperation);
+
+            // 2. Gate Check (Post-Edit Integrity)
+            const coreState = toCoreState(updated);
+            const normalizedState = reconstructItinerary(coreState);
+            ItineraryGate.verify(normalizedState);
+
+            ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary.title);
+            ctx.currentState = 'READY';
+            saveSession(ctx);
+
+            return {
+                message: `Done. I've updated your itinerary based on your request.`,
+                itinerary: ctx.itinerary,
+                currentState: 'READY',
+            };
         } else {
-            // Heuristic fallback matching previous logic
-            if (userInput.toLowerCase().includes('relax')) editIntent.change = 'relax';
-            const dayMatch = userInput.match(/day (\d+)/i);
-            if (dayMatch) editIntent.day = parseInt(dayMatch[1]);
+            // Fallback if LLM missed it but Router caught it (Should be rare with new LLM logic)
+            console.warn('[Orchestrator] Edit State but no EditOperation.');
+            return {
+                message: 'I understood you want to edit, but I am not sure what specific change you want. Try "Make day 1 relaxed" or "Swap day 1 and 2".',
+                currentState: 'READY'
+            };
         }
-
-        const updated = await applyDeterministicEdit(ctx.itinerary, editIntent);
-        ctx.itinerary = updated;
-        ctx.currentState = 'READY';
-        saveSession(ctx);
-
-        return {
-            message: 'I’ve updated your itinerary.',
-            itinerary: updated,
-            currentState: 'READY',
-        };
     }
 
     // -------------------

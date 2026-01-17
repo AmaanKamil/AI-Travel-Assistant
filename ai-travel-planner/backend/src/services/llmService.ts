@@ -1,4 +1,5 @@
 import { Intent } from '../types/intent';
+import { EditIntentType, EditOperation } from '../types/edit';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 
@@ -9,104 +10,58 @@ if (process.env.OPENAI_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-export async function extractIntent(text: string, currentState?: string): Promise<Intent> {
-    const start = Date.now();
+export async function extractIntent(text: string, currentState?: string): Promise<Intent & { editOperation?: EditOperation }> {
     console.log(`[LLM Service] Parsing: "${text}" | State: ${currentState || 'N/A'}`);
     if (!text || text.trim().length === 0) return { type: 'plan_trip', entities: {} };
 
-    const normalized = text.trim().toLowerCase();
+    // --- HEURISTIC OVERRIDES ---
+    const lower = text.toLowerCase().trim();
 
-    // HARD OVERRIDE FOR CONFIRMATION STATE
+    // 1. Confirmations
     if (currentState === 'CONFIRMING') {
-        if (
-            normalized.includes('yes') ||
-            normalized.includes('generate') ||
-            normalized.includes('go ahead') ||
-            normalized.includes('create') ||
-            normalized.includes('proceed') ||
-            normalized.includes('ok') ||
-            normalized.includes('sure') ||
-            normalized.includes('yep') ||
-            normalized.includes('yeah')
-        ) {
-            console.log('[LLM Service] Hard override: CONFIRM_GENERATE');
+        if (/^(yes|sure|go ahead|generate|create|ok|yep|yeah|proceed)$/i.test(lower)) {
             return { type: 'CONFIRM_GENERATE' };
         }
     }
 
-    if (
-        normalized === 'yes' ||
-        normalized === 'yeah' ||
-        normalized === 'yep' ||
-        normalized === 'sure' ||
-        normalized === 'ok' ||
-        normalized === 'okay' ||
-        normalized === 'go ahead' ||
-        normalized === 'generate' ||
-        normalized === 'please do'
-    ) {
-        return { type: 'CONFIRM_GENERATE' };
-    }
-
-    if (/^(yes|yeah|yep|sure|go ahead|generate|okay|ok)$/i.test(text.trim())) {
-        return { type: 'CONFIRM_GENERATE', entities: {} };
-    }
-
+    // 2. Simple fallback regex for "3 days"
     const extractDaysRegex = (input: string) => {
         const match = input.match(/(\d+)\s*days?/i) || input.match(/^(\d+)$/);
         return match ? parseInt(match[1]) : null;
     };
 
-    const performFallback = (input: string): Intent => {
-        console.log(`[LLM Service] Using Fallback Logic for: "${input}"`);
-        const lower = input.toLowerCase();
-
-        // Check days explicitly
-        const days = extractDaysRegex(input);
-        if (days) return { type: 'plan_trip', entities: { days } };
-
-        if (lower.includes("plan") || lower.includes("trip")) return { type: 'plan_trip', entities: {} };
-
-        if (lower.includes("relaxed") || lower.includes("change") || lower.includes("swap") || lower.includes("more")) {
-            return {
-                type: 'edit_itinerary',
-                entities: {},
-                editIntent: {
-                    target_day: 2, // Default to 2 for demo if unspeicified
-                    target_block: null,
-                    change_type: lower.includes("relaxed") ? 'make_more_relaxed' : 'swap_activity',
-                    raw_instruction: input
-                }
-            };
-        }
-
-        if (lower.includes("why")) return { type: 'ask_question', entities: {} };
-        if (lower.includes("email") || lower.includes("send")) return { type: 'export', entities: {} };
-
-        return { type: 'plan_trip', entities: {} };
-    };
-
-    // Primary: Try OpenAI
+    // --- LLM PARSING ---
     if (openai) {
         try {
             const systemPrompt = `
-            You are an intent parser. Extract intent and entities.
-            Output JSON only.
-            Intents: plan_trip, edit_itinerary, ask_question, export.
+            You are a strict intent classifier for a Travel Assistant.
             
-            Rules:
-            1. If user wants to "change", "swap", "make more relaxed", "make packed", or mentions a specific "Day X", classify as "edit_itinerary".
-            2. If user provides "days", "pace", or "interests" (experiences like art, food, history) for a NEW trip, classify as "plan_trip".
-            3. "3 days" -> plan_trip { days: 3 }.
-            4. "Relaxed" -> plan_trip { pace: "relaxed" }.
-            5. "I like history and souks" -> plan_trip { interests: ["history", "souks"] }.
-            
-            Entities: 
-            - days (number)
-            - pace (relaxed, medium, packed)
-            - interests (string[] - extract key themes e.g. "beach", "shopping", "culture")
+            OUTPUT JSON ONLY. Structure:
+            {
+                "type": "plan_trip" | "edit_itinerary" | "ask_question" | "export",
+                "entities": { "days": number, "pace": string, "interests": string[] },
+                "editOperation": {
+                    "intent": "${Object.values(EditIntentType).join('" | "')}",
+                    "sourceDay": number,     // 1-based index (default to 0 if unknown)
+                    "targetDay": number,     // 1-based index (optional)
+                    "itemToMove": string,    // Fuzzy name of activity
+                    "targetSlot": "morning" | "afternoon" | "evening"
+                }
+            }
 
-            If intent is "edit_itinerary", extract change_type (make_more_relaxed, swap_activity, add_place) and target_day (number).
+            RULES:
+            1. "Make day 2 relaxed" -> type="edit_itinerary", editOperation={ intent: "RELAX_DAY", sourceDay: 2 }
+            2. "Make day 3 packed" -> type="edit_itinerary", editOperation={ intent: "PACK_DAY", sourceDay: 3 }
+            3. "Move Burj Khalifa to day 4" -> type="edit_itinerary", editOperation={ intent: "MOVE_ITEM_BETWEEN_DAYS", itemToMove: "Burj Khalifa", sourceDay: 0, targetDay: 4 }
+            4. "Move Lunch to 7pm" -> type="edit_itinerary", editOperation={ intent: "MOVE_ITEM_WITHIN_DAY", itemToMove: "Lunch", targetSlot: "evening" }
+            5. "Swap day 1 and 2" -> type="edit_itinerary", editOperation={ intent: "SWAP_DAYS", sourceDay: 1, targetDay: 2 }
+            6. "3 days relaxed" -> type="plan_trip", entities={ "days": 3, "pace": "relaxed" }
+            7. "Why did you pick this?" -> type="ask_question"
+            8. "Email me this" -> type="export"
+            
+            Ambiguity:
+            - If "move X to tomorrow" and current context unknown, set sourceDay=0, targetDay=0 (logic will ask or infer).
+            - Default sourceDay to 0 if not mentioned.
             `;
 
             const completion = await openai.chat.completions.create({
@@ -123,46 +78,61 @@ export async function extractIntent(text: string, currentState?: string): Promis
             if (!content) throw new Error("Empty LLM response");
 
             const parsed = JSON.parse(content);
-            console.log(`[LLM Service] Success (${Date.now() - start}ms)`);
 
-            // Merge Regex Days if LLM missed it
+            // Merge simple regex days if LLM missed it
             const regexDays = extractDaysRegex(text);
-            if (regexDays && (!parsed.entities || !parsed.entities.days)) {
+            if (regexDays && parsed.type === 'plan_trip' && !parsed.entities?.days) {
                 parsed.entities = { ...(parsed.entities || {}), days: regexDays };
-                // Also force type if ambiguously parsed
-                if (!parsed.type) parsed.type = 'plan_trip';
             }
 
-            // HEURISTIC OVERRIDE: Strict Regex Priority
-            // If user mentions "Day X" modification, force Edit regardless of LLM output
-            if (/make day \d/i.test(text) || /change day \d/i.test(text) || /swap/i.test(text) || /make .* relaxed/i.test(text)) {
-                console.log("[LLM Service] Overriding LLM to EDIT_ITINERARY based on regex.");
-                parsed.type = 'edit_itinerary';
-                parsed.intentType = 'edit_itinerary';
-                parsed.intent = 'edit_itinerary'; // Cover all bases
-
-                // Extract target day if missing
-                const dayMatch = text.match(/day (\d+)/i);
-                if (dayMatch && (!parsed.editIntent || !parsed.editIntent.target_day)) {
-                    parsed.editIntent = {
-                        target_day: parseInt(dayMatch[1]),
-                        change_type: text.includes("relaxed") ? 'make_more_relaxed' : 'swap_activity'
-                    };
-                }
-            }
-
+            // Validated strict return
             return {
-                type: parsed.intentType || parsed.type || 'plan_trip',
+                type: parsed.type || 'plan_trip',
                 entities: parsed.entities || {},
-                editIntent: parsed.editIntent || undefined
+                editOperation: parsed.editOperation ? {
+                    ...parsed.editOperation,
+                    rawInstruction: text
+                } : undefined
             };
 
         } catch (error) {
-            console.warn(`[LLM Service] OpenAI Failed: ${(error as any).message}. Switching to Fallback.`);
-            return performFallback(text);
+            console.warn(`[LLM Service] Parse Failed: ${(error as any).message}`);
+            // Fallthrough to simple fallback below
         }
-    } else {
-        // No client, use fallback
-        return performFallback(text);
     }
+
+    // --- FALLBACK LOGIC ---
+    if (lower.includes('relax')) {
+        return {
+            type: 'edit_itinerary',
+            entities: {},
+            editOperation: {
+                intent: EditIntentType.RELAX_DAY,
+                sourceDay: parseInt(text.match(/day (\d+)/i)?.[1] || '1'),
+                rawInstruction: text
+            }
+        };
+    }
+
+    if (lower.includes('swap')) {
+        return {
+            type: 'edit_itinerary',
+            entities: {},
+            editOperation: {
+                intent: EditIntentType.SWAP_DAYS,
+                sourceDay: parseInt(text.match(/day (\d+)/i)?.[1] || '1'),
+                targetDay: parseInt(text.match(/and (\d+)/i)?.[1] || '2'),
+                rawInstruction: text
+            }
+        };
+    }
+
+    if (lower.includes('plan') || lower.includes('trip') || extractDaysRegex(text)) {
+        return { type: 'plan_trip', entities: { days: extractDaysRegex(text) || undefined } };
+    }
+
+    if (lower.includes('why')) return { type: 'ask_question', entities: {} };
+    if (lower.includes('email')) return { type: 'export', entities: {} };
+
+    return { type: 'plan_trip', entities: {} };
 }
