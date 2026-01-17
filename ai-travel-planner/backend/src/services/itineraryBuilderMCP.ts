@@ -198,7 +198,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             activity: `Visit ${poi.name}`,
             duration: getDuration(poi.category, poi.name),
             description: `Explore ${poi.category}.`,
-            type: 'ATTRACTION' as any, // Typed as ATTRACTION
+            type: 'ATTRACTION' as const,
             fixed: false,
             location: poi.location?.zone || poi.location?.name || '',
             category: 'Sightseeing' // UI fallback
@@ -213,7 +213,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             activity: `Lunch at ${lunchSpot.name}`,
             duration: '90 mins',
             description: `${lunchSpot.cuisine} • ${lunchSpot.area}`,
-            type: 'MEAL' as any, // Typed as MEAL
+            type: 'MEAL', // Typed as MEAL
             mealType: 'lunch' as 'lunch',
             fixed: true,
             cuisine: lunchSpot.cuisine, // ADDED metadata
@@ -235,7 +235,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                     activity: `Visit ${selected.name}`,
                     duration: getDuration(selected.category, selected.name),
                     description: `Explore ${selected.category}.`,
-                    type: 'ATTRACTION' as any,
+                    type: 'ATTRACTION',
                     fixed: false,
                     location: selected.location?.zone || selected.location?.name || '',
                     category: 'Sightseeing'
@@ -252,7 +252,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             activity: `Dinner at ${dinnerSpot.name}`,
             duration: '90 mins',
             description: `${dinnerSpot.cuisine} • ${dinnerSpot.area}`,
-            type: 'MEAL' as any,
+            type: 'MEAL',
             mealType: 'dinner' as 'dinner',
             fixed: true,
             cuisine: dinnerSpot.cuisine, // ADDED metadata

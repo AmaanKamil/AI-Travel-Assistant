@@ -24,4 +24,5 @@ export interface TimeBlock {
     description?: string;
     isFlexible?: boolean;
     fixed?: boolean;
+    category?: string;
 }
