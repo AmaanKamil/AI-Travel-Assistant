@@ -16,23 +16,35 @@ import { emailService } from '../services/emailService';
 
 const REQUIRED_FIELDS = ['days', 'pace', 'interests'] as const;
 
+// STRICT VALIDATION GATE
+function validatePlanningContext(ctx: SessionContext): 'VALID' | 'MISSING_DAYS' | 'MISSING_PACE' | 'MISSING_INTERESTS' {
+    const c = ctx.collectedConstraints;
+    if (!c.days) return 'MISSING_DAYS';
+    if (!c.pace || c.pace.toLowerCase() === 'unknown') return 'MISSING_PACE';
+    if (!c.interests || c.interests.length === 0) return 'MISSING_INTERESTS';
+    return 'VALID';
+}
+
 function getMissingField(ctx: SessionContext): string | null {
-    for (const f of REQUIRED_FIELDS) {
-        if (!(ctx.collectedConstraints as any)[f]) return f;
-    }
+    // Legacy helper: Keep for getNextQuestion logic, but aligned with strict validator
+    const val = validatePlanningContext(ctx);
+    if (val === 'VALID') return null;
+    if (val === 'MISSING_DAYS') return 'days';
+    if (val === 'MISSING_PACE') return 'pace';
+    if (val === 'MISSING_INTERESTS') return 'interests';
     return null;
 }
 
 function nextClarifyingQuestion(field: string): string {
     switch (field) {
         case 'days':
-            return 'How many days are you planning to stay in Dubai?';
+            return 'Before I generate your plan, I need to know: How many days will you be in Dubai?';
         case 'pace':
-            return 'Do you prefer a relaxed or packed schedule?';
+            return 'One more thing: Do you prefer a relaxed, balanced, or packed schedule?';
         case 'interests':
-            return 'What kind of experiences do you enjoy? For example food, culture, shopping, adventure.';
+            return 'To personalize your trip, tell me what you enjoy (e.g., food, history, shopping, adventure).';
         default:
-            return '';
+            return 'Missing information.';
     }
 }
 
@@ -278,8 +290,17 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     }
 
     // Merge entities if present (important for one-shot "3 days relaxed")
+    // SMART MERGE: Only update fields that are actually present and valid
     if (intent.entities) {
-        ctx.collectedConstraints = { ...ctx.collectedConstraints, ...intent.entities };
+        const updates = intent.entities;
+        if (updates.days) ctx.collectedConstraints.days = updates.days;
+        if (updates.pace) ctx.collectedConstraints.pace = updates.pace;
+        if (updates.interests && updates.interests.length > 0) {
+            // Append or replace? Let's replace for now to allow correction, or maybe union?
+            // "I like food" -> replaces "I like history"? Usually clarification replaces or refines.
+            // Let's stick to replace for simplicity of "correction".
+            ctx.collectedConstraints.interests = updates.interests;
+        }
     }
 
     if (ctx.currentState === 'COLLECTING_INFO') {
@@ -323,45 +344,53 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
 
         if (intent.type === 'CONFIRM_GENERATE') {
-            const missing = getMissingField(ctx);
-            if (!missing) {
-                console.log("[Orchestrator] All constraints collected. Building itinerary...");
-                const itinerary = await buildItinerary(
-                    // @ts-ignore
-                    ctx.collectedConstraints.interests,
-                    // @ts-ignore
-                    parseInt(ctx.collectedConstraints.days) || 3,
-                    // @ts-ignore
-                    ctx.collectedConstraints.pace || 'medium'
-                );
+            const validationState = validatePlanningContext(ctx);
 
-                if (itinerary) {
-                    // STRICT RECONSTRUCTION GATE (PLAN)
-                    const coreState = toCoreState(itinerary);
-                    const normalizedState = reconstructItinerary(coreState);
-                    ItineraryGate.verify(normalizedState); // <--- HARD GATE
+            if (validationState !== 'VALID') {
+                console.log(`[Orchestrator] BLOCKED GENERATION: ${validationState}`);
+                const missing = getMissingField(ctx);
+                return {
+                    message: nextClarifyingQuestion(missing!), // Force question
+                    currentState: 'COLLECTING_INFO' // Downgrade state if somehow here
+                };
+            }
 
-                    ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
+            console.log("[Orchestrator] Context VALID. Building itinerary...");
+            const itinerary = await buildItinerary(
+                // @ts-ignore
+                ctx.collectedConstraints.interests,
+                // @ts-ignore
+                ctx.collectedConstraints.days, // NO DEFAULT
+                // @ts-ignore
+                ctx.collectedConstraints.pace   // NO DEFAULT
+            );
 
-                    // ISOLATED PDF GENERATION (Non-blocking)
-                    try {
-                        const pdf = await pdfService.generate(ctx.itinerary);
-                        (ctx as any).lastPDFPath = pdf;
-                    } catch (pdfErr: any) {
-                        console.error('[ORCHESTRATOR] PDF generation failed, but continuing flow:', pdfErr.message);
-                    }
+            if (itinerary) {
+                // STRICT RECONSTRUCTION GATE (PLAN)
+                const coreState = toCoreState(itinerary);
+                const normalizedState = reconstructItinerary(coreState);
+                ItineraryGate.verify(normalizedState); // <--- HARD GATE
 
-                    ctx.planGenerated = true;
-                    ctx.currentState = 'READY';
-                    saveSession(ctx);
+                ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
 
-                    return {
-                        message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
-                        itinerary: ctx.itinerary,
-                        session_id: ctx.sessionId,
-                        currentState: 'READY'
-                    };
+                // ISOLATED PDF GENERATION (Non-blocking)
+                try {
+                    const pdf = await pdfService.generate(ctx.itinerary);
+                    (ctx as any).lastPDFPath = pdf;
+                } catch (pdfErr: any) {
+                    console.error('[ORCHESTRATOR] PDF generation failed, but continuing flow:', pdfErr.message);
                 }
+
+                ctx.planGenerated = true;
+                ctx.currentState = 'READY';
+                saveSession(ctx);
+
+                return {
+                    message: `I've created a custom itinerary for you based on ${ctx.collectedConstraints.interests}. Check it out on the screen! Would you like to make any changes or send this to your email?`,
+                    itinerary: ctx.itinerary,
+                    session_id: ctx.sessionId,
+                    currentState: 'READY'
+                };
             }
         }
 

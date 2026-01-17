@@ -19,7 +19,7 @@ export async function extractIntent(text: string, currentState?: string): Promis
 
     // 1. Confirmations
     if (currentState === 'CONFIRMING') {
-        if (/^(yes|sure|go ahead|generate|create|ok|yep|yeah|proceed)$/i.test(lower)) {
+        if (/^(yes|sure|go ahead|generate|create|ok|yep|yeah|proceed)/i.test(lower)) {
             return { type: 'CONFIRM_GENERATE' };
         }
     }
