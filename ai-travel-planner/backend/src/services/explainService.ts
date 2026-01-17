@@ -17,7 +17,7 @@ export const explainService = {
             for (const day of itinerary.days) {
                 for (const block of day.blocks) {
                     if (lowerText.includes(block.activity.toLowerCase()) || block.activity.toLowerCase().includes(lowerText)) {
-                        return `I included ${block.activity} because it fits your ${itinerary.title.includes('relaxed') ? 'relaxed' : 'active'} trip pace. It's a highly rated spot in the ${(block.description?.split('.')[0]) || 'area'}, perfect for a ${block.time.toLowerCase()} visit.`;
+                        return `I included ${block.activity} because it fits your ${itinerary.title.includes('relaxed') ? 'relaxed' : 'active'} trip pace. It's a highly rated spot in the ${(block.description?.split('.')[0]) || 'area'}, perfect for a visit.`;
                     }
                 }
             }

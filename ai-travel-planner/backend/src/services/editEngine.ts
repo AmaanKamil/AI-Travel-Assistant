@@ -35,7 +35,7 @@ export function applyDeterministicEdit(
             // Fallback to slot match or first non-fixed activity.
             const blockIndex = sourceDay.blocks.findIndex(b =>
                 !b.fixed &&
-                (!intent.target_block || b.slot === intent.target_block || b.time.toLowerCase().includes(intent.target_block || ''))
+                (!intent.target_block || b.slot === intent.target_block || (b.time || '').toLowerCase().includes(intent.target_block || ''))
             );
 
             if (blockIndex !== -1) {

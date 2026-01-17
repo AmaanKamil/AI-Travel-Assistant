@@ -52,7 +52,7 @@ function mapBlockToItem(block: TimeBlock, day: number): ItineraryItem {
     else if (block.type === 'other') type = 'REST';
 
     let slot: Slot = 'AFTERNOON';
-    const t = block.time.toLowerCase();
+    const t = (block.time || '').toLowerCase();
     if (t.includes('morning') || block.slot === 'morning') slot = 'MORNING';
     else if (t.includes('evening') || t.includes('07:00') || block.slot === 'evening') slot = 'EVENING';
 
@@ -62,7 +62,7 @@ function mapBlockToItem(block: TimeBlock, day: number): ItineraryItem {
         type,
         slot,
         day,
-        estVisitMins: parseDuration(block.duration),
+        estVisitMins: parseDuration(block.duration || '90 mins'),
         estTravelMins: 0, // Logic to recalculate later?
         restaurantCuisine: block.description?.split('•')[0]?.trim(),
         description: block.description,
