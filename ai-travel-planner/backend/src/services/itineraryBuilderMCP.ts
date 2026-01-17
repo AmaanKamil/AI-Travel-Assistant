@@ -1,5 +1,5 @@
 import { Itinerary, DayPlan, TimeBlock } from '../types/itinerary';
-import { EditIntent } from '../types/intent';
+import { EditOperation } from '../types/edit';
 import { validateAndNormalizeItinerary } from '../utils/itineraryValidator';
 
 // Helper to identify "Iconic" POIs
@@ -285,7 +285,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
     });
 }
 
-export async function buildItineraryEdit(original: Itinerary, intent: EditIntent): Promise<Itinerary> {
+export async function buildItineraryEdit(original: Itinerary, intent: EditOperation): Promise<Itinerary> {
     // Moved complex logic to editEngine.ts, this is now a passthrough if needed
     // or we can remove this if orchestrator calls editEngine directly.
     // For safety, we keep a minimal version or delegate.

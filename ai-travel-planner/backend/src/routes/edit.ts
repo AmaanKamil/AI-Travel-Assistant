@@ -2,6 +2,7 @@ import { Router } from 'express';
 // Adapted import path to where sessionContext actually is
 import { getSession, saveSession } from '../orchestrator/sessionContext';
 import { applyDeterministicEdit } from '../services/editEngine';
+import { EditOperation, EditIntentType } from '../types/edit';
 
 const router = Router();
 
@@ -38,9 +39,10 @@ router.post('/', async (req, res) => {
 
     const day = parseInt(match[1], 10);
 
-    const intent = {
-        change: 'relax' as const,
-        day
+    const intent: EditOperation = {
+        intent: EditIntentType.RELAX_DAY,
+        sourceDay: day,
+        rawInstruction: command
     };
 
     try {

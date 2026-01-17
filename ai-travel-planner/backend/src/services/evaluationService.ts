@@ -1,6 +1,6 @@
 import { Itinerary } from '../types/itinerary';
 import { EvaluationReport, EditCorrectnessReport } from '../types/evaluation';
-import { EditIntent } from '../types/intent';
+import { EditOperation } from '../types/edit';
 
 export interface ComprehensiveEvaluationReport extends EvaluationReport {
     feasibility: { passed: boolean; message: string };
@@ -19,17 +19,18 @@ export async function runEvaluations(itinerary: Itinerary): Promise<Comprehensiv
     };
 }
 
-export async function runEditCorrectnessEval(original: Itinerary, updated: Itinerary, intent: EditIntent): Promise<EditCorrectnessReport> {
+export async function runEditCorrectnessEval(original: Itinerary, updated: Itinerary, intent: EditOperation): Promise<EditCorrectnessReport> {
     console.log(`[Eval Service] Verifying edit correctness...`);
 
     // 1. Check if only the target day changed
     const issues: string[] = [];
     let passed = true;
 
-    if (intent.target_day) {
+    const targetDay = intent.targetDay || intent.sourceDay;
+    if (targetDay) {
         // Validation: Ensure other days are identical
         updated.days.forEach(updatedDay => {
-            if (updatedDay.day !== intent.target_day) {
+            if (updatedDay.day !== targetDay && updatedDay.day !== intent.sourceDay) {
                 const originalDay = original.days.find(d => d.day === updatedDay.day);
                 if (JSON.stringify(originalDay) !== JSON.stringify(updatedDay)) {
                     passed = false;
