@@ -6,32 +6,32 @@ import { validateAndNormalizeItinerary } from '../utils/itineraryValidator';
 const isIconic = (poi: any) => poi.score >= 50 || poi.metadata?.source === 'Seed';
 
 // --- CURATED RESTAURANT POOL (Fix B & D) ---
-type Restaurant = { id: string; name: string; cuisine: string; area: string };
+type Restaurant = { id: string; name: string; cuisine: string; area: string; location: { lat: number; lng: number; zone: string } };
 
 const RESTAURANT_POOL: Record<string, Restaurant[]> = {
     'Downtown': [
-        { id: 'dt1', name: 'Zuma', cuisine: 'Contemporary Japanese', area: 'Downtown' },
-        { id: 'dt2', name: 'Thiptara', cuisine: 'Thai cuisine with fountain views', area: 'Downtown' },
-        { id: 'dt3', name: 'Social House', cuisine: 'International flavors', area: 'Downtown' },
-        { id: 'dt4', name: 'Armani Ristorante', cuisine: 'Italian fine dining', area: 'Downtown' }
+        { id: 'dt1', name: 'Zuma', cuisine: 'Contemporary Japanese', area: 'Downtown', location: { lat: 25.2120, lng: 55.2825, zone: 'Downtown' } },
+        { id: 'dt2', name: 'Thiptara', cuisine: 'Thai cuisine with fountain views', area: 'Downtown', location: { lat: 25.1956, lng: 55.2758, zone: 'Downtown' } },
+        { id: 'dt3', name: 'Social House', cuisine: 'International flavors', area: 'Downtown', location: { lat: 25.1989, lng: 55.2796, zone: 'Downtown' } },
+        { id: 'dt4', name: 'Armani Ristorante', cuisine: 'Italian fine dining', area: 'Downtown', location: { lat: 25.1972, lng: 55.2744, zone: 'Downtown' } }
     ],
     'Old Dubai': [
-        { id: 'od1', name: 'Al Fanar', cuisine: 'Authentic Emirati seafood', area: 'Old Dubai' },
-        { id: 'od2', name: 'Arabian Tea House', cuisine: 'Traditional Emirati breakfast & lunch', area: 'Old Dubai' },
-        { id: 'od3', name: 'XVA Café', cuisine: 'Vegetarian Middle Eastern', area: 'Old Dubai' }
+        { id: 'od1', name: 'Al Fanar', cuisine: 'Authentic Emirati seafood', area: 'Old Dubai', location: { lat: 25.2635, lng: 55.2972, zone: 'Old Dubai' } },
+        { id: 'od2', name: 'Arabian Tea House', cuisine: 'Traditional Emirati breakfast & lunch', area: 'Old Dubai', location: { lat: 25.2633, lng: 55.2970, zone: 'Old Dubai' } },
+        { id: 'od3', name: 'XVA Café', cuisine: 'Vegetarian Middle Eastern', area: 'Old Dubai', location: { lat: 25.2640, lng: 55.2980, zone: 'Old Dubai' } }
     ],
     'Marina': [
-        { id: 'dm1', name: 'Pier 7', cuisine: 'Multi-story fine dining', area: 'Dubai Marina' },
-        { id: 'dm2', name: 'The MAINE Oyster Bar', cuisine: 'Seafood brasserie', area: 'JBR' },
-        { id: 'dm3', name: 'Asia Asia', cuisine: 'Pan-Asian fusion', area: 'Dubai Marina' }
+        { id: 'dm1', name: 'Pier 7', cuisine: 'Multi-story fine dining', area: 'Dubai Marina', location: { lat: 25.0777, lng: 55.1404, zone: 'Marina' } },
+        { id: 'dm2', name: 'The MAINE Oyster Bar', cuisine: 'Seafood brasserie', area: 'JBR', location: { lat: 25.0715, lng: 55.1287, zone: 'Marina' } },
+        { id: 'dm3', name: 'Asia Asia', cuisine: 'Pan-Asian fusion', area: 'Dubai Marina', location: { lat: 25.0778, lng: 55.1405, zone: 'Marina' } }
     ],
     'Jumeirah': [
-        { id: 'jum1', name: '3 Fils', cuisine: 'Modern Asian seafood', area: 'Jumeirah Fishing Harbour' },
-        { id: 'jum2', name: 'The Hamptons Cafe', cuisine: 'Mediterranean inspired', area: 'Jumeirah' }
+        { id: 'jum1', name: '3 Fils', cuisine: 'Modern Asian seafood', area: 'Jumeirah Fishing Harbour', location: { lat: 25.1610, lng: 55.2345, zone: 'Jumeirah' } },
+        { id: 'jum2', name: 'The Hamptons Cafe', cuisine: 'Mediterranean inspired', area: 'Jumeirah', location: { lat: 25.2048, lng: 55.2708, zone: 'Jumeirah' } }
     ],
     'Other': [
-        { id: 'oth1', name: 'Local Gem', cuisine: 'Authentic local dishes', area: 'Dubai' },
-        { id: 'oth2', name: 'Hidden Garden', cuisine: 'International fusion', area: 'Dubai' }
+        { id: 'oth1', name: 'Local Gem', cuisine: 'Authentic local dishes', area: 'Dubai', location: { lat: 25.2, lng: 55.3, zone: 'Center' } },
+        { id: 'oth2', name: 'Hidden Garden', cuisine: 'International fusion', area: 'Dubai', location: { lat: 25.21, lng: 55.31, zone: 'Center' } }
     ]
 };
 
@@ -63,13 +63,13 @@ const getRestaurantForZone = (zone: string, dayNum: number, type: 'lunch' | 'din
 // --- FALLBACK ACTIVITY GENERATOR ---
 const getFallbackActivity = (zone: string) => {
     const fallbacks: Record<string, any> = {
-        'Downtown': { name: 'Dubai Boulevard Walk', category: 'Walk', description: 'Leisurely stroll through Downtown Dubai.' },
-        'Old Dubai': { name: 'Creek Promenade', category: 'Walk', description: 'Walk along the historic Dubai Creek.' },
-        'Marina': { name: 'Marina Promenade', category: 'Walk', description: 'Scenic walk along the water.' },
-        'Palm': { name: 'Palm West Beach', category: 'Beach', description: 'Relax at the beach promenade.' },
-        'Jumeirah': { name: 'Kite Beach Walk', category: 'Walk', description: 'Walk along the coast.' }
+        'Downtown': { name: 'Dubai Boulevard Walk', category: 'Walk', description: 'Leisurely stroll through Downtown Dubai.', location: { lat: 25.197, lng: 55.274, zone: 'Downtown' } },
+        'Old Dubai': { name: 'Creek Promenade', category: 'Walk', description: 'Walk along the historic Dubai Creek.', location: { lat: 25.263, lng: 55.297, zone: 'Old Dubai' } },
+        'Marina': { name: 'Marina Promenade', category: 'Walk', description: 'Scenic walk along the water.', location: { lat: 25.078, lng: 55.140, zone: 'Marina' } },
+        'Palm': { name: 'Palm West Beach', category: 'Beach', description: 'Relax at the beach promenade.', location: { lat: 25.112, lng: 55.139, zone: 'Palm' } },
+        'Jumeirah': { name: 'Kite Beach Walk', category: 'Walk', description: 'Walk along the coast.', location: { lat: 25.161, lng: 55.234, zone: 'Jumeirah' } }
     };
-    return fallbacks[zone] || { name: 'City Exploration', category: 'Walk', description: 'Explore the local area.' };
+    return fallbacks[zone] || { name: 'City Exploration', category: 'Walk', description: 'Explore the local area.', location: { lat: 25.2, lng: 55.27, zone: 'Other' } };
 };
 
 // --- VALIDATION HELPER ---
@@ -226,6 +226,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             category: 'Sightseeing', // Corrected
             source: 'OpenStreetMap / Wikivoyage', // Default source
             timeOfDay: 'Morning' as 'Morning',
+            coordinates: poi.location, // Pass coordinates
             explanation: generateExplanation(poi, poi.location.zone || targetZone, isIconic(poi), false)
         })));
 
@@ -243,6 +244,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             category: 'Meal',
             source: 'Google Places / Tripadvisor',
             timeOfDay: 'Afternoon' as 'Afternoon',
+            coordinates: lunchSpot.location, // Pass coordinates
             explanation: generateExplanation(lunchSpot, targetZone, false, true)
         });
 
@@ -276,6 +278,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
                 category: 'Sightseeing',
                 source: 'OpenStreetMap / Wikivoyage',
                 timeOfDay: 'Afternoon' as 'Afternoon',
+                coordinates: afternoonActivity.location, // Pass coordinates
                 explanation: generateExplanation(afternoonActivity, afternoonActivity.location?.zone || targetZone, isIconic(afternoonActivity), false)
             });
         } else {
@@ -310,6 +313,7 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             category: 'Meal',
             source: 'Google Places / Tripadvisor',
             timeOfDay: 'Evening' as 'Evening',
+            coordinates: dinnerSpot.location, // Pass coordinates
             explanation: generateExplanation(dinnerSpot, targetZone, false, true)
         });
 

@@ -69,7 +69,8 @@ function mapBlockToItem(block: TimeBlock, day: number): ItineraryItem {
         location: block.location,
         category: block.category,
         sources: block.sources, // Keep the array if it exists
-        explanation: (block as any).explanation // Persist explanation
+        explanation: (block as any).explanation, // Persist explanation
+        coordinates: (block as any).coordinates // Persist coordinates
     };
 }
 
@@ -98,7 +99,8 @@ function mapItemToBlock(item: ItineraryItem): TimeBlock {
         fixed: item.type !== 'ATTRACTION', // Meals are usually fixed
         category: item.category,
         sources: item.sources,
-        explanation: item.explanation
+        explanation: item.explanation,
+        coordinates: item.coordinates
     };
 }
 

@@ -36,6 +36,7 @@ export interface NormalizedItineraryItem {
     cuisine?: string | null;
     sources: Source[];
     explanation?: Explanation;
+    coordinates?: { lat: number; lng: number };
 }
 
 export interface TimeBlock extends Omit<Partial<NormalizedItineraryItem>, 'type' | 'mealType'> {

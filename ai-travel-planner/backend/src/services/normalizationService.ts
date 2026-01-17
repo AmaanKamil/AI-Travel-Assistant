@@ -1,4 +1,5 @@
 import { Itinerary, TimeBlock, NormalizedItineraryItem, Source, Explanation } from '../types/itinerary';
+import { calculateHaversineDistance, getWalkingOrTaxiTime } from '../utils/geo';
 
 export function normalizeItinerary(itinerary: Itinerary): Itinerary {
     const normalizedCopy = JSON.parse(JSON.stringify(itinerary));
@@ -77,7 +78,8 @@ function normalizeItem(block: TimeBlock, day: number): NormalizedItineraryItem {
         travelTimeRange: null, // Placeholder, calculated in Pass 2
         cuisine: block.cuisine || null,
         sources,
-        explanation
+        explanation,
+        coordinates: (block as any).coordinates
     };
 }
 
@@ -108,10 +110,22 @@ function applyContextualRules(items: NormalizedItineraryItem[]): NormalizedItine
             item.travelTimeRange = null;
         } else {
             const prev = items[index - 1];
-            if (prev.zone === item.zone) {
-                item.travelTimeRange = "15-30 mins by car";
+
+            // Haversine Distance Calculation (If coordinates available)
+            const dist = calculateHaversineDistance(prev.coordinates, item.coordinates);
+
+            if (dist !== null) {
+                // Dynamic Travel Time
+                const travelString = getWalkingOrTaxiTime(dist);
+                const distString = dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`;
+                item.travelTimeRange = `${travelString} (${distString})`;
             } else {
-                item.travelTimeRange = "30-60 mins by car";
+                // Fallback Heuristic
+                if (prev.zone === item.zone) {
+                    item.travelTimeRange = "10-20 mins by taxi";
+                } else {
+                    item.travelTimeRange = "30-60 mins by taxi";
+                }
             }
         }
 

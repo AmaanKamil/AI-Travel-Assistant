@@ -20,6 +20,7 @@ export interface ItineraryItem {
     category?: string; // Preserved for normalization
     sources?: any[];   // Preserved for normalization
     explanation?: any; // Preserved for grounded answers
+    coordinates?: { lat: number; lng: number }; // Preserved for travel time calc
 }
 
 export interface ItineraryState {
