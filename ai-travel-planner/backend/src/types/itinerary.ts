@@ -11,18 +11,16 @@ export interface DayPlan {
 // STRICT SCHEMA
 export interface TimeBlock {
     id: string;
-    time: string; // Keep for UI display (e.g. "09:00 AM")
-    slot: 'morning' | 'afternoon' | 'evening';
+    activity: string;
     type: 'activity' | 'meal' | 'transfer' | 'other' | 'MEAL' | 'ATTRACTION';
     mealType?: 'lunch' | 'dinner' | 'breakfast';
-    activity: string; // Mapped to 'title'
-    location?: string;
     cuisine?: string;
-    duration: string; // Display string
-    visitDurationMins?: number;
-    travelDurationMins?: number;
     description?: string;
+    duration?: string;
+    time?: string;
+    slot?: 'morning' | 'afternoon' | 'evening';
+    location?: string;
+    category?: string;
     isFlexible?: boolean;
     fixed?: boolean;
-    category?: string;
 }

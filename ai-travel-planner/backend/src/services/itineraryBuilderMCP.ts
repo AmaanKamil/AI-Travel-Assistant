@@ -101,17 +101,7 @@ const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 const estimateTravelTime = (prevLoc: any, currLoc: any): string => {
-    if (!prevLoc || !currLoc) return "Start";
-
-    const dist = haversineDistance(prevLoc.lat, prevLoc.lng, currLoc.lat, currLoc.lng);
-
-    // Strict buckets per requirements
-    // Same area (< 3km) -> 10 to 15 mins
-    if (dist < 3) return "10-15 mins";
-    // Nearby areas (< 10km) -> 20 to 30 mins
-    if (dist < 10) return "20-30 mins";
-    // Far areas (>= 10km) -> 35 to 50 mins
-    return "35-50 mins";
+    return ""; // Completely removed per requirements
 };
 
 const getDuration = (category: string, name: string): string => {
@@ -205,8 +195,6 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
 
         dailyBlocks.push(...dayActivities.map(poi => ({
             id: `block-${Math.random().toString(36).substr(2, 9)}`,
-            time: '',     // REMOVED explicit time
-            slot: 'morning' as 'morning',
             activity: `Visit ${poi.name}`,
             duration: getDuration(poi.category, poi.name),
             description: `Explore ${poi.category}.`,
@@ -220,8 +208,6 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         const lunchSpot = getRestaurantForZone(targetZone, i, 'lunch', usedPlaceNames);
         dailyBlocks.push({
             id: `block-lunch-${i}`,
-            time: '',    // REMOVED explicit time
-            slot: 'afternoon' as 'afternoon',
             activity: `Lunch at ${lunchSpot.name}`,
             duration: '90 mins',
             description: `${lunchSpot.cuisine} • ${lunchSpot.area}`,
@@ -253,8 +239,6 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
 
             dailyBlocks.push({
                 id: `block-${Math.random().toString(36).substr(2, 9)}`,
-                time: '', // REMOVED explicit time
-                slot: 'afternoon',
                 activity: `Visit ${afternoonActivity.name}`,
                 duration: getDuration(afternoonActivity.category, afternoonActivity.name),
                 description: `Explore ${afternoonActivity.category}.`,
@@ -268,8 +252,6 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
             const fallback = getFallbackActivity(targetZone);
             dailyBlocks.push({
                 id: `block-fallback-${Math.random().toString(36).substr(2, 9)}`,
-                time: '',
-                slot: 'afternoon',
                 activity: fallback.name,
                 duration: '60 mins',
                 description: fallback.description,
@@ -284,8 +266,6 @@ export async function buildItinerary(pois: any[], days: number, pace: string = '
         const dinnerSpot = getRestaurantForZone(targetZone, i, 'dinner', usedPlaceNames);
         dailyBlocks.push({
             id: `block-dinner-${i}`,
-            time: '', // REMOVED explicit time
-            slot: 'evening' as 'evening',
             activity: `Dinner at ${dinnerSpot.name}`,
             duration: '90 mins',
             description: `${dinnerSpot.cuisine} • ${dinnerSpot.area}`,

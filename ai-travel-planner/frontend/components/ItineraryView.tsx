@@ -1,32 +1,18 @@
 "use client";
 
 import React from 'react';
-import { Calendar, Clock, MapPin, Coffee, Sun, Moon } from 'lucide-react';
+import { Calendar, MapPin } from 'lucide-react';
 
 interface Activity {
     name: string;
     category: string;
-    duration: string;
-    travelTime?: string;
-    time?: string; // Optional: backfill if grouping isn't pre-defined
+    description?: string;
     cuisine?: string;
-}
-
-interface Section {
-    title: string;
-    activities: Activity[];
-}
-
-interface DayPlan {
-    day: number;
-    morning: Activity[];
-    afternoon: Activity[];
-    evening: Activity[];
 }
 
 interface Itinerary {
     title: string;
-    days: any[]; // Using any because the incoming structure might vary
+    days: any[];
 }
 
 interface ItineraryViewProps {
@@ -37,41 +23,6 @@ interface ItineraryViewProps {
 const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }) => {
     if (!itinerary || !itinerary.days) return null;
 
-    // Helper to group activities if they are just a flat list of blocks
-    const getSections = (dayData: any) => {
-        // If the data already has morning/afternoon/evening
-        if (dayData.morning || dayData.afternoon || dayData.evening) {
-            return [
-                { title: 'Morning', activities: dayData.morning || [], icon: <Coffee className="w-5 h-5 text-amber-500" /> },
-                { title: 'Afternoon', activities: dayData.afternoon || [], icon: <Sun className="w-5 h-5 text-orange-500" /> },
-                { title: 'Evening', activities: dayData.evening || [], icon: <Moon className="w-5 h-5 text-indigo-400" /> },
-            ];
-        }
-
-        // Fallback logic for flat blocks (as seen in backend types)
-        const blocks = dayData.blocks || [];
-        const morning = blocks.filter((b: any) => {
-            const hour = parseInt(b.time);
-            return isNaN(hour) || (hour >= 6 && hour < 12) || b.time.toLowerCase().includes('am');
-        }).map(mapBlockToActivity);
-
-        const afternoon = blocks.filter((b: any) => {
-            const hour = parseInt(b.time);
-            return (hour >= 12 && hour < 18) || (b.time.toLowerCase().includes('pm') && parseInt(b.time) < 6) || (b.time.toLowerCase().includes('12'));
-        }).map(mapBlockToActivity);
-
-        const evening = blocks.filter((b: any) => {
-            const hour = parseInt(b.time);
-            return (hour >= 18 || hour < 6) || (b.time.toLowerCase().includes('pm') && parseInt(b.time) >= 6);
-        }).map(mapBlockToActivity);
-
-        return [
-            { title: 'Morning', activities: morning, icon: <Coffee className="w-5 h-5 text-amber-500" /> },
-            { title: 'Afternoon', activities: afternoon, icon: <Sun className="w-5 h-5 text-orange-500" /> },
-            { title: 'Evening', activities: evening, icon: <Moon className="w-5 h-5 text-indigo-400" /> },
-        ];
-    };
-
     function mapBlockToActivity(block: any): Activity {
         const isMeal = block.type === 'MEAL' || block.mealType;
         const fallbackCat = isMeal ? 'Meal' : 'Sightseeing';
@@ -79,9 +30,7 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
         return {
             name: block.activity,
             category: block.category || fallbackCat,
-            duration: block.duration || '2 hours',
-            travelTime: block.travelTime || '20 mins',
-            time: block.time,
+            description: block.description || block.cuisine,
             cuisine: block.cuisine
         };
     }
@@ -97,8 +46,6 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                 {itinerary.days.map((dayData, idx) => {
                     const dayNumber = dayData.day || (idx + 1);
                     const isHighlighted = highlightDay === dayNumber;
-
-                    // FLATTEN BLOCKS (Fix: No Sections)
                     const activities = (dayData.blocks || []).map(mapBlockToActivity);
 
                     return (
@@ -133,30 +80,18 @@ const ItineraryView: React.FC<ItineraryViewProps> = ({ itinerary, highlightDay }
                                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                                     <div>
                                                         <h5 className="font-medium text-white">{activity.name}</h5>
-                                                        {activity.cuisine && (
-                                                            <div className="text-sm text-gray-300 italic mb-1">{activity.cuisine}</div>
-                                                        )}
+
+                                                        {activity.cuisine ? (
+                                                            <div className="text-sm text-blue-400 italic mb-1">Cuisine: {activity.cuisine}</div>
+                                                        ) : activity.description ? (
+                                                            <div className="text-sm text-gray-400 mb-1">{activity.description}</div>
+                                                        ) : null}
+
                                                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                                                             <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                                                                 {activity.category}
                                                             </span>
-                                                            <span className="flex items-center gap-1">
-                                                                <Clock className="w-3 h-3" />
-                                                                {activity.time}
-                                                            </span>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex flex-col items-start sm:items-end gap-1">
-                                                        <div className="flex items-center gap-1 text-xs text-blue-400">
-                                                            <Clock className="w-3 h-3" />
-                                                            <span>Est. {activity.duration}</span>
-                                                        </div>
-                                                        {activity.travelTime && (
-                                                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                                                                <MapPin className="w-3 h-3" />
-                                                                <span>+{activity.travelTime} travel</span>
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
