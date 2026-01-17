@@ -360,8 +360,14 @@ export async function handleUserInput(sessionId: string, userInput: string) {
 
                     ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
 
-                    const pdf = await pdfService.generate(ctx.itinerary);
-                    (ctx as any).lastPDFPath = pdf; // cast if property missing
+                    // ISOLATED PDF GENERATION (Non-blocking)
+                    try {
+                        const pdf = await pdfService.generate(ctx.itinerary);
+                        (ctx as any).lastPDFPath = pdf;
+                    } catch (pdfErr: any) {
+                        console.error('[ORCHESTRATOR] PDF generation failed, but continuing flow:', pdfErr.message);
+                    }
+
                     ctx.planGenerated = true;
                     ctx.currentState = 'READY';
                     saveSession(ctx);
