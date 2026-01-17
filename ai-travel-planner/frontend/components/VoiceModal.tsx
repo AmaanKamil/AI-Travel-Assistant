@@ -57,12 +57,20 @@ export default function VoiceModal({ onClose }: VoiceModalProps) {
         setIsExporting(true);
         setExportStatus(null);
 
-        // DIRECT CALL (Fix E)
-        const result = await exportItinerary(displayItinerary, email);
+        // PASS SESSION ID (ui-demo used in handleSubmit)
+        const result = await exportItinerary(displayItinerary, email, "ui-demo");
 
         if (result.success) {
             setExportStatus("Email sent successfully! Check your inbox.");
             setEmail("");
+            // Play Voice Confirmation
+            if (result.audio) {
+                playAudio(result.audio);
+            }
+            // Add to chat history as final message
+            if (result.message) {
+                setMessages(prev => [...prev, { role: 'assistant', content: result.message }]);
+            }
             setTimeout(() => setExportStatus(null), 5000);
         } else {
             setExportStatus("Failed: " + result.message);

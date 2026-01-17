@@ -46,11 +46,12 @@ export const editItinerary = async (sessionId: string, editCommand: string): Pro
     }
 };
 
-export const exportItinerary = async (itinerary: any, userEmail: string): Promise<{ success: boolean; message: string; status?: string }> => {
+export const exportItinerary = async (itinerary: any, userEmail: string, sessionId: string): Promise<{ success: boolean; message: string; audio?: string; status?: string }> => {
     try {
         const response = await axios.post(`${API_BASE_URL}/api/send-itinerary-email`, {
             itinerary,
-            email: userEmail
+            email: userEmail,
+            sessionId
         });
         return response.data;
     } catch (error: any) {

@@ -49,7 +49,7 @@ router.post('/edit-itinerary', async (req, res) => {
 
 // CONSOLIDATED EMAIL ENDPOINT
 router.post('/send-itinerary-email', async (req, res) => {
-    const { email, itinerary } = req.body;
+    const { email, itinerary, sessionId } = req.body;
 
     // STEP 1: Strict Validation
     if (!email || typeof email !== 'string' || !email.includes('@')) {
@@ -73,7 +73,26 @@ router.post('/send-itinerary-email', async (req, res) => {
 
         if (emailResult.success) {
             console.log(`[API] SUCCESS: Email accepted by Gmail for ${email}`);
-            return res.json({ success: true });
+
+            // RESET SESSION STATE (Exit Email Mode)
+            if (sessionId) {
+                const ctx = getSession(sessionId);
+                if (ctx) {
+                    ctx.currentState = 'READY';
+                    saveSession(ctx);
+                    console.log(`[API] Session ${sessionId} reset to READY after email.`);
+                }
+            }
+
+            // GENERATE VOICE CONFIRMATION
+            const voiceConfirm = "Your itinerary has been sent to your email. Wish you a very happy trip to Dubai.";
+            const audioData = await generateSpeech(voiceConfirm);
+
+            return res.json({
+                success: true,
+                message: voiceConfirm,
+                audio: audioData
+            });
         } else {
             console.error(`[API] FAILURE: ${emailResult.message} for ${email}`);
             // Use 502 for provider failure
