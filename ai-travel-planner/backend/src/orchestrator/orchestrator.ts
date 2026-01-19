@@ -234,6 +234,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 const normalizedState = reconstructItinerary(coreState);
                 ItineraryGate.verify(normalizedState);
 
+                ctx.canonicalItinerary = normalizedState; // PERSIST CANONICAL STATE
                 ctx.itinerary = toLegacyItinerary(normalizedState, ctx.itinerary.title);
 
                 // FORCE NORMALIZATION AT THE GATE
@@ -397,6 +398,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
                 const normalizedState = reconstructItinerary(coreState);
                 ItineraryGate.verify(normalizedState); // <--- HARD GATE
 
+                ctx.canonicalItinerary = normalizedState; // PERSIST CANONICAL STATE
                 ctx.itinerary = toLegacyItinerary(normalizedState, itinerary.title);
 
                 // FORCE NORMALIZATION AT THE GATE
@@ -438,22 +440,18 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // EXPLANATION FLOW
     // -------------------
     if (ctx.currentState === 'EXPLAINING') {
-        const rag = await getGroundedAnswer(userInput);
+        // USE CANONICAL ITINERARY FOR EXPLANATIONS
+        const explanation = await explainService.explainPlace(userInput, ctx.canonicalItinerary);
 
         ctx.currentState = 'READY';
         saveSession(ctx);
 
-        if (!rag || rag.sources.length === 0) {
-            return {
-                message: 'I don’t yet have verified public data for this place.',
-                currentState: 'READY'
-            };
-        }
-
         return {
-            message: rag.answer,
-            sources: rag.sources,
-            citations: rag.sources,
+            message: explanation,
+            // Sources/Citations are now embedded in the text or handled by the service string
+            // If the UI needs them separately, we'd need to adjust explainService to return an object.
+            // For now, the prompt says "Respond with a grounded explanation... If a source exists: Cite it explicitly".
+            // The string returned by explainService includes "Verified by: X, Y".
             currentState: 'READY'
         };
     }
