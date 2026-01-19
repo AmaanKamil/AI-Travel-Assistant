@@ -298,7 +298,7 @@ export async function handleUserInput(sessionId: string, userInput: string) {
             ctx.currentState = 'COLLECTING_INFO';
 
             // RESET TRIP STATE -> Authoritative Source
-            ctx.tripState = { destination: 'Dubai' };
+            ctx.tripState = { destination: 'Dubai', isComplete: false };
             ctx.clarificationsCompleted = false;
 
             ctx.planGenerated = false;
@@ -309,41 +309,42 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         }
     }
 
-    // Merge entities if present (important for one-shot "3 days relaxed")
-    // SMART MERGE: Only update fields that are actually present and valid
+    // -------------------
+    // STATE UPDATE: COLLECTING INFO
+    // -------------------
+    // Merge entities if present (important for one-shot "3 days relaxed" or partial answers)
     if (intent.entities) {
         const updates = intent.entities;
+
+        // Only update if value is provided/valid
         if (updates.days) ctx.tripState.days = updates.days;
         if (updates.pace) ctx.tripState.pace = updates.pace;
         if (updates.interests && updates.interests.length > 0) {
-            // Append or replace? Let's replace for now to allow correction, or maybe union?
-            // "I like food" -> replaces "I like history"? Usually clarification replaces or refines.
-            // Let's stick to replace for simplicity of "correction".
             ctx.tripState.interests = updates.interests;
         }
+
+        console.log('[Orchestrator] Updated TripState:', JSON.stringify(ctx.tripState));
     }
 
     if (ctx.currentState === 'COLLECTING_INFO') {
-        // Validation Check - ALWAYS RUN THIS
         const validationState = validatePlanningContext(ctx);
+        const missing = getMissingField(ctx);
 
-        // Prevent re-entry if already done, unless explicit change requested
-        // AND validation is actually passing
-        if (intent.type !== 'CHANGE_PREFERENCES' && validationState === 'VALID') {
-            ctx.clarificationsCompleted = true; // GATE OPEN
-            ctx.currentState = 'CONFIRMING';
-            // Fall through to confirming logic below
+        if (missing) {
+            // Still missing info -> Ask next question
+            // PREVENT LOOPS: If we just asked this question and answer was invalid, maybe rephrase?
+            // For now, standard question is fine.
+            ctx.tripState.isComplete = false;
+            saveSession(ctx);
+
+            return {
+                message: nextClarifyingQuestion(missing),
+                currentState: 'COLLECTING_INFO',
+            };
         } else {
-            const missing = getMissingField(ctx);
-            if (missing) {
-                return {
-                    message: nextClarifyingQuestion(missing),
-                    currentState: 'COLLECTING_INFO',
-                };
-            }
-
-            // All fields collected
-            ctx.clarificationsCompleted = true; // GATE OPEN
+            // All fields collected -> Gate Open
+            ctx.tripState.isComplete = true; // GATE OPEN
+            ctx.clarificationsCompleted = true; // Legacy flag sync
             ctx.currentState = 'CONFIRMING';
             saveSession(ctx);
 
@@ -370,15 +371,18 @@ export async function handleUserInput(sessionId: string, userInput: string) {
 
         if (intent.type === 'CONFIRM_GENERATE') {
             // DOUBLE CHECK: Even if they say "yes", do we have the data?
-            // This prevents "Yes" bypassing the check if state was somehow forced.
-            const validationState = validatePlanningContext(ctx);
+            // "isComplete" flag + validation check prevents bypassing.
 
-            if (validationState !== 'VALID') {
-                console.log(`[Orchestrator] BLOCKED GENERATION: ${validationState}`);
+            if (!ctx.tripState.isComplete || validatePlanningContext(ctx) !== 'VALID') {
+                console.log(`[Orchestrator] BLOCKED GENERATION: Incomplete State`);
                 const missing = getMissingField(ctx);
+
+                ctx.currentState = 'COLLECTING_INFO'; // Revert state
+                saveSession(ctx);
+
                 return {
-                    message: nextClarifyingQuestion(missing!), // Force question
-                    currentState: 'COLLECTING_INFO' // Downgrade state if somehow here
+                    message: missing ? nextClarifyingQuestion(missing) : "I'm still missing some details (days, pace, interests). Can you clarify?",
+                    currentState: 'COLLECTING_INFO'
                 };
             }
 

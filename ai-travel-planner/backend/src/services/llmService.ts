@@ -63,10 +63,14 @@ export async function extractIntent(text: string, currentState?: string): Promis
             12. "Change lunch on day 2" -> type="edit_itinerary", editOperation={ intent: "REPLACE_ITEM", sourceDay: 2, itemToMove: "Lunch" }
             13. "Replace Burj Khalifa" -> type="edit_itinerary", editOperation={ intent: "REPLACE_ITEM", sourceDay: 0, itemToMove: "Burj Khalifa" }
             14. "Done" or "Looks good" -> type="CONFIRM_GENERATE" (or handle as exit)
+            15. "Balanced" -> type="plan_trip", entities={ "pace": "balanced" }
+            16. "Food and Shopping" -> type="plan_trip", entities={ "interests": ["Food", "Shopping"] }
+            17. "Yes" (In CONFIRMING state) -> type="CONFIRM_GENERATE"
             
             Ambiguity:
             - If "move X to tomorrow" and current context unknown, set sourceDay=0, targetDay=0 (logic will ask or infer).
             - Default sourceDay to 0 if not mentioned.
+            - Pace map: "slow"->"relaxed", "normal"->"balanced", "fast"->"packed".
             `;
 
             const completion = await openai.chat.completions.create({

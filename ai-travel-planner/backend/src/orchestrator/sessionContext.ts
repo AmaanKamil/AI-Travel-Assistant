@@ -12,6 +12,7 @@ export interface SessionContext {
         pace?: string;
         interests?: string[];
         constraints?: string[]; // Generic bucket for other things
+        isComplete: boolean; // Gating flag
     };
     clarificationsCompleted: boolean;
     // constraintsCollected: boolean; // DEPRECATED in favor of clarificationsCompleted
@@ -39,7 +40,7 @@ export function createNewSession(sessionId: string): SessionContext {
     const newContext: SessionContext = {
         sessionId,
         currentState: 'IDLE',
-        tripState: { destination: 'Dubai' }, // Default context
+        tripState: { destination: 'Dubai', isComplete: false }, // Default context
         clarificationsCompleted: false, // Explicit Gate
         planGenerated: false,
         clarificationCount: 0
