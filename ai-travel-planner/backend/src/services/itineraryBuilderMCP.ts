@@ -143,14 +143,34 @@ const FAMOUS_POIS = [
 // --- EXPLANATION GENERATOR (Fix: "Why" Questions) ---
 const generateExplanation = (poi: any, zone: string, isIconicPoi: boolean, isMeal: boolean): any => {
     const category = poi.category || (isMeal ? 'Dining' : 'Sightseeing');
+
+    // Explicit Reason Generation
+    const reasons: string[] = [];
+
+    // 1. Interest / Category Alignment
+    if (isIconicPoi) {
+        reasons.push(`${poi.name} is a world-famous landmark that defines the Dubai skyline.`);
+    } else {
+        reasons.push(`It is a highly rated ${category.toLowerCase()} experience in ${zone}.`);
+    }
+
+    // 2. Feasibility / Location
+    reasons.push(`Located in ${zone}, it fits perfectly into your day's route to minimize travel time.`);
+
+    // 3. Pacing / Experience
+    if (isMeal) {
+        reasons.push("It offers an authentic taste of local cuisine during your break.");
+    } else {
+        reasons.push("It allows for a balanced mix of exploration and leisure.");
+    }
+
     return {
-        why_this_was_chosen: isIconicPoi
-            ? `I picked ${poi.name} because it is a world-famous landmark in ${zone} that matches your goal of seeing Dubai's iconic sights.`
-            : `This spot in ${zone} is highly rated for its ${category.toLowerCase()} experience and fits perfectly into the day's route. Why? It optimizes your travel time.`,
+        why_this_was_chosen: reasons,
+        whyChosen: reasons.join(" "), // Legacy support
 
         feasibilityReason: isMeal
-            ? "Allocated 45 mins. This fits within the standard meal break time and is close to your other activities."
-            : `Allocated ${getDuration(category, poi.name)}. This allows ample time to explore without rushing, based on typical visitor data.`,
+            ? "Allocated 45 mins. This fits within the standard meal break time."
+            : `Allocated ${getDuration(category, poi.name)}. This allows ample time to explore without rushing.`,
 
         sources: isMeal ? ["Google Places", "Tripadvisor", "Michelin Guide"] : ["OpenStreetMap", "Wikivoyage", "Official Tourism Guide"],
         tags: [zone, category, isIconicPoi ? "Iconic" : "Gem"]

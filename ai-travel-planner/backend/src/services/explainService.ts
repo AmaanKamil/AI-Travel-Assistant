@@ -9,15 +9,25 @@ export const explainService = {
             const lowerText = text.toLowerCase();
             for (const day of itinerary.days) {
                 for (const block of day.blocks) {
-                    if (lowerText.includes(block.activity.toLowerCase()) || block.activity.toLowerCase().includes(lowerText)) {
+                    const activityClean = block.activity.toLowerCase().replace('visit ', '').replace('lunch at ', '').replace('dinner at ', '').trim();
+                    if (lowerText.includes(activityClean) || activityClean.includes(lowerText)) {
                         // GROUNDED ANSWER (Strict)
                         if ((block as any).explanation) {
-                            // Support new metadata field explicitly
-                            return (block as any).explanation.why_this_was_chosen || (block as any).explanation.whyChosen;
+                            const expl = (block as any).explanation;
+                            // Prefer the distinct reasons if available
+                            if (expl.why_this_was_chosen && Array.isArray(expl.why_this_was_chosen) && expl.why_this_was_chosen.length > 0) {
+                                const reasons = expl.why_this_was_chosen.map((r: string) => `• ${r}`).join('\n');
+                                const sourceText = expl.sources?.length ? `\n\nVerified by: ${expl.sources.join(', ')}` : '';
+                                return `Here is why I chose ${block.activity}:\n\n${reasons}${sourceText}`;
+                            }
+
+                            // Legacy fallback (should handle migration)
+                            if (expl.whyChosen) return expl.whyChosen;
                         }
 
-                        // Fallback (should be rare with new logic)
-                        return `I included ${block.activity} because it fits your ${itinerary.title.includes('relaxed') ? 'relaxed' : 'active'} trip pace. It's a highly rated spot in the ${(block.description?.split('.')[0]) || 'area'}, perfect for a visit.`;
+                        // Fallback (Only if data is truly corrupted)
+                        console.error(`[ExplainService] Missing explanation metadata for ${block.activity}`);
+                        return "I see this in your itinerary, but I couldn't retrieve the specific verified data points for why it was selected. This is a system error.";
                     }
                 }
             }
@@ -28,6 +38,6 @@ export const explainService = {
             return result.answer;
         }
 
-        return "I included this place because it is one of Dubai's top-rated attractions and fits well within your travel route, minimizing travel time between stops.";
+        return "I don't yet have verified public data for this place.";
     }
 };

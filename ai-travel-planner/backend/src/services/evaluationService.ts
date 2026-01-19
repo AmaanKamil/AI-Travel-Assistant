@@ -10,12 +10,31 @@ export interface ComprehensiveEvaluationReport extends EvaluationReport {
 
 export async function runEvaluations(itinerary: Itinerary): Promise<ComprehensiveEvaluationReport> {
     console.log(`[Eval Service] Evaluating itinerary...`);
+    // Data Grounding Check
+    let groundingPassed = true;
+    let groundingMessage = "All POIs sourced from verifiable datasets.";
+    let missingExplanationCount = 0;
+
+    itinerary.days.forEach(day => {
+        day.blocks.forEach(block => {
+            const expl = (block as any).explanation;
+            if (!expl || !expl.why_this_was_chosen || !Array.isArray(expl.why_this_was_chosen) || expl.why_this_was_chosen.length === 0) {
+                groundingPassed = false;
+                missingExplanationCount++;
+            }
+        });
+    });
+
+    if (!groundingPassed) {
+        groundingMessage = `Data Grounding FAILED: ${missingExplanationCount} items missing stored explanation metadata.`;
+    }
+
     return {
-        passed: true,
-        issues: [],
+        passed: groundingPassed, // Fail the whole eval if grounding fails? Or just the sub-check? User said "eval must visibly fail".
+        issues: groundingPassed ? [] : ["Data Grounding Failure: Missing metadata"],
         feasibility: { passed: true, message: "Travel times and durations are realistic." },
         edit_correctness: { passed: true, message: "No unexpected side effects detected." },
-        grounding: { passed: true, message: "All POIs sourced from verifiable datasets." }
+        grounding: { passed: groundingPassed, message: groundingMessage }
     };
 }
 

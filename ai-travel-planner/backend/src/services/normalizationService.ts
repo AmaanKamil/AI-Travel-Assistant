@@ -58,12 +58,31 @@ function normalizeItem(block: TimeBlock, day: number): NormalizedItineraryItem {
     const sources = getDeterministicSources(title, type === 'meal');
 
     // Normalize Explanation (Backfill if missing)
-    const explanation = (block as any).explanation || {
-        whyChosen: `I included ${title} because it is a popular ${type === 'meal' ? 'dining spot' : 'attraction'} in the ${zone} area.`,
-        feasibilityReason: `Allocated ${durationRange}. This fits well within your daily schedule.`,
-        tags: [zone, type],
-        sources: sources.map(s => s.label)
-    };
+    const explanation = (block as any).explanation || {};
+
+    // Ensure why_this_was_chosen exists as array
+    if (!explanation.why_this_was_chosen || !Array.isArray(explanation.why_this_was_chosen)) {
+        explanation.why_this_was_chosen = [
+            `I included ${title} because it is a popular ${type === 'meal' ? 'dining spot' : 'attraction'} in the ${zone} area.`,
+            `Allocated ${durationRange}, fitting well within your schedule.`
+        ];
+    }
+
+    // Ensure legacy whyChosen exists
+    if (!explanation.whyChosen) {
+        explanation.whyChosen = explanation.why_this_was_chosen.join(" ");
+    }
+
+    // Ensure other fields
+    if (!explanation.feasibilityReason) {
+        explanation.feasibilityReason = `Allocated ${durationRange}. This fits well within your daily schedule.`;
+    }
+    if (!explanation.tags) {
+        explanation.tags = [zone, type];
+    }
+    if (!explanation.sources) {
+        explanation.sources = sources.map(s => s.label);
+    }
 
     return {
         id: block.id,

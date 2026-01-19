@@ -15,7 +15,8 @@ export interface Source {
 }
 
 export interface Explanation {
-    whyChosen: string;
+    why_this_was_chosen: string[]; // Mandatory: 2-4 distinct reasons
+    whyChosen?: string; // Legacy/Optional
     feasibilityReason: string;
     alternativesConsidered?: string;
     tags?: string[];
