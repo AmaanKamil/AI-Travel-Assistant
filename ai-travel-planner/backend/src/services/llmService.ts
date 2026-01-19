@@ -67,10 +67,12 @@ export async function extractIntent(text: string, currentState?: string): Promis
             16. "Food and Shopping" -> type="plan_trip", entities={ "interests": ["Food", "Shopping"] }
             17. "Yes" (In CONFIRMING state) -> type="CONFIRM_GENERATE"
             
-            Ambiguity:
-            - If "move X to tomorrow" and current context unknown, set sourceDay=0, targetDay=0 (logic will ask or infer).
-            - Default sourceDay to 0 if not mentioned.
-            - Pace map: "slow"->"relaxed", "normal"->"balanced", "fast"->"packed".
+            STRICT ENTITY RULES:
+            - NEVER include a field in "entities" unless it is EXPLICITLY mentioned in the user message.
+            - DO NOT guess or provide defaults (like "balanced" or "normal") if the user didn't specify.
+            - If user only provides a number (e.g. "3"), set entities.days = 3.
+            
+            Pace map: "slow"->"relaxed", "normal"->"balanced", "fast"->"packed".
             `;
 
             const completion = await openai.chat.completions.create({

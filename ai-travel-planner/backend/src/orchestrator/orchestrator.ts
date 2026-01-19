@@ -132,18 +132,19 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     );
 
     // ===============================
+    // GLOBAL COMMANDS
     // ===============================
-    // ===============================
-    // SAFE STATE ENFORCEMENT
-    // ===============================
-    if (ctx.currentState === 'POST_PLAN_READY') {
-        // Strict allow-list for post-plan intents
-        const text = userInput.toLowerCase();
-
-        // Let extractIntent handle specific classifications, but block new "plan_trip" unless explicit "start over"
-        // For now, we rely on extractIntent to classify correctly.
+    const isExplicitReset = /start over|new plan|from scratch|reset|garbage/i.test(userInput.toLowerCase());
+    if (isExplicitReset) {
+        console.log('[Orchestrator] GLOBAL RESET TRIGGERED');
+        ctx = createNewSession(sessionId);
+        saveSession(ctx);
+        return {
+            message: 'Restarted. Tell me about your trip to Dubai.',
+            currentState: 'COLLECTING_INFO'
+        };
     }
-    // ===============================
+
     // END HARD ROUTING
     // ===============================
 
@@ -291,20 +292,21 @@ export async function handleUserInput(sessionId: string, userInput: string) {
     // -------------------
     // PLANNING FLOW
     // -------------------
-    if (intent.type === 'plan_trip' || ctx.currentState === 'IDLE' || ctx.currentState === 'READY') { // Added READY -> COLLECTING trigger if plan_trip
-        if (intent.type === 'plan_trip') {
-            // STRICT RESET: User wants a new plan, so invalidate previous state
-            console.log('[Orchestrator] Starting NEW Plan -> Resetting Constraints');
+    if (intent.type === 'plan_trip' || ctx.currentState === 'IDLE' || ctx.currentState === 'READY') {
+        if (intent.type === 'plan_trip' && ctx.currentState !== 'COLLECTING_INFO') {
+            // Transition from Ready/Post-plan to a new collection phase
+            console.log('[Orchestrator] Starting NEW Plan Phase');
             ctx.currentState = 'COLLECTING_INFO';
 
-            // RESET TRIP STATE -> Authoritative Source
-            ctx.tripState = { destination: 'Dubai', isComplete: false };
-            ctx.clarificationsCompleted = false;
-
-            ctx.planGenerated = false;
-            ctx.itinerary = undefined;
-            // We keep collectedConstraints partially to allow "refinement" if entities are present,
-            // but the 'constraintsCollected' flag being false forces re-validation.
+            // If they haven't planned anything yet, just ensure state is ready
+            if (!ctx.planGenerated) {
+                // Already in progress or idle, keep logic simple
+            } else {
+                // If a plan was ALREADY generated, and they say "Plan a trip", 
+                // we should probably clear the old plan metadata but keep the intent if they provide one-shot info.
+                ctx.planGenerated = false;
+                ctx.itinerary = undefined;
+            }
             saveSession(ctx);
         }
     }
@@ -317,9 +319,9 @@ export async function handleUserInput(sessionId: string, userInput: string) {
         const updates = intent.entities;
 
         // Only update if value is provided/valid
-        if (updates.days) ctx.tripState.days = updates.days;
-        if (updates.pace) ctx.tripState.pace = updates.pace;
-        if (updates.interests && updates.interests.length > 0) {
+        if (updates.days && !ctx.tripState.days) ctx.tripState.days = updates.days;
+        if (updates.pace && !ctx.tripState.pace) ctx.tripState.pace = updates.pace;
+        if (updates.interests && updates.interests.length > 0 && (!ctx.tripState.interests || ctx.tripState.interests.length === 0)) {
             ctx.tripState.interests = updates.interests;
         }
 
