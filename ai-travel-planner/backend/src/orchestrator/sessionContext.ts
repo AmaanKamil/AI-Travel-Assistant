@@ -1,6 +1,7 @@
 import { Itinerary } from '../types/itinerary';
 import { EvaluationReport } from '../types/evaluation';
 import { OrchestratorState } from './stateMachine';
+import { ItineraryState } from '../core/itineraryNormalizer';
 
 export interface SessionContext {
     sessionId: string;
@@ -18,7 +19,8 @@ export interface SessionContext {
     // planGenerated: boolean; (duplicate removed)
     clarificationCount: number;
     userEmail?: string;
-    itinerary?: Itinerary;
+    itinerary?: Itinerary; // Render/Legacy Itinerary
+    canonicalItinerary?: ItineraryState; // Authoritative Source
     lastEvaluation?: EvaluationReport;
     lastEditIntent?: any;
 }
